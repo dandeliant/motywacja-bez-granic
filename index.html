@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Motywacja bez granic — Twój system dyscypliny</title>
+    <link rel="stylesheet" href="style.css" />
+
+    <!-- ===== PWA META ===== -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MBG" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+
+    <!-- Chart.js do wizualizacji postępów -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- =========================================================
+     LEWY PASEK NAWIGACJI
+     ========================================================= -->
+<aside class="sidebar">
+    <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <h1>MBG</h1>
+        <small>Motywacja bez granic</small>
+    </div>
+
+    <nav class="nav">
+        <button class="nav-btn active" data-view="dashboard">🏠 <span>Dashboard</span></button>
+        <button class="nav-btn" data-view="tasks">✅ <span>Zadania</span></button>
+        <button class="nav-btn" data-view="timer">⏱️ <span>Timer</span></button>
+        <button class="nav-btn" data-view="journal">📓 <span>Dziennik</span></button>
+        <button class="nav-btn" data-view="stats">📊 <span>Statystyki</span></button>
+        <button class="nav-btn" data-view="habits">💧 <span>Nawyki</span></button>
+        <button class="nav-btn" data-view="calendar">🗓️ <span>Kalendarz</span></button>
+        <button class="nav-btn" data-view="achievements">🏆 <span>Osiągnięcia</span></button>
+        <button class="nav-btn" data-view="challenges">🔥 <span>Wyzwania</span></button>
+        <button class="nav-btn" data-view="settings">⚙️ <span>Ustawienia</span></button>
+    </nav>
+
+    <div class="sidebar-footer">
+        <button class="install-btn hidden" id="installBtn">📲 Zainstaluj aplikację</button>
+        <button class="focus-btn" id="toggleFocus">🎯 Tryb Focus</button>
+    </div>
+</aside>
+
+<!-- =========================================================
+     GÓRNY PASEK — POZIOM, XP, STREAK, PUNKTY
+     ========================================================= -->
+<header class="topbar">
+    <div class="user-stats">
+        <div class="stat-chip level-chip">
+            <span class="chip-label">LVL</span>
+            <span class="chip-value" id="userLevel">1</span>
+        </div>
+
+        <div class="xp-bar-wrap">
+            <div class="xp-bar">
+                <div class="xp-fill" id="xpFill"></div>
+            </div>
+            <span class="xp-text" id="xpText">0 / 100 XP</span>
+        </div>
+
+        <div class="stat-chip streak-chip">
+            <span>🔥</span>
+            <span id="userStreak">0</span>
+            <small>dni</small>
+        </div>
+
+        <div class="stat-chip points-chip">
+            <span>💎</span>
+            <span id="userPoints">0</span>
+        </div>
+    </div>
+
+    <div class="topbar-right">
+        <span class="today-date" id="todayDate"></span>
+    </div>
+</header>
+
+<!-- =========================================================
+     OBSZAR GŁÓWNY — WIDOKI
+     ========================================================= -->
+<main class="main">
+
+    <!-- ============= DASHBOARD ============= -->
+    <section class="view active" id="view-dashboard">
+        <div class="hero">
+            <h2 id="greeting">Cześć 👋</h2>
+            <p class="quote" id="dailyQuote">"Dyscyplina jest mostem między celami a osiągnięciami."</p>
+        </div>
+
+        <div class="dash-grid">
+            <div class="card big-card">
+                <h3>Dzisiaj</h3>
+                <div class="today-stats">
+                    <div class="mini-stat">
+                        <span class="mini-num" id="todayTasks">0</span>
+                        <span class="mini-lbl">ukończone zadania</span>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-num" id="todayTime">0m</span>
+                        <span class="mini-lbl">czas pracy</span>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-num" id="todayXP">0</span>
+                        <span class="mini-lbl">XP zdobyte</span>
+                    </div>
+                </div>
+
+                <h4>Dzienny cel</h4>
+                <div class="daily-goal-bar">
+                    <div class="daily-goal-fill" id="dailyGoalFill"></div>
+                </div>
+                <p class="daily-goal-txt" id="dailyGoalTxt">0 / 3 zadań — gotów na małe zwycięstwo?</p>
+            </div>
+
+            <div class="card">
+                <h3>⚡ Szybki start</h3>
+                <button class="primary-btn big" id="quickStartTimer">▶️ Rozpocznij sesję focus</button>
+                <button class="secondary-btn" id="quickAddTask">➕ Dodaj zadanie</button>
+                <button class="secondary-btn" id="quickJournal">✍️ Wpis do dziennika</button>
+            </div>
+
+            <div class="card">
+                <h3>🔥 Streak</h3>
+                <div class="streak-display">
+                    <div class="streak-big" id="streakBig">0</div>
+                    <div class="streak-sub">dni z rzędu</div>
+                </div>
+                <p class="streak-warn" id="streakWarn"></p>
+            </div>
+
+            <div class="card wide">
+                <h3>📅 Aktywne zadania</h3>
+                <div id="activeTasksList" class="task-list-mini"></div>
+            </div>
+
+            <!-- KARTY: DZIŚ / JUTRO / POJUTRZE (z Do_zrobienia.xlsx) -->
+            <div class="card three-days-card">
+                <h3>🗓️ Nadchodzące</h3>
+                <div class="three-days-grid">
+                    <div class="day-col">
+                        <div class="day-col-header today-hdr">DZIŚ</div>
+                        <div class="day-col-date" id="dayDate0"></div>
+                        <div id="dayTasks0" class="day-tasks"></div>
+                    </div>
+                    <div class="day-col">
+                        <div class="day-col-header">JUTRO</div>
+                        <div class="day-col-date" id="dayDate1"></div>
+                        <div id="dayTasks1" class="day-tasks"></div>
+                    </div>
+                    <div class="day-col">
+                        <div class="day-col-header">POJUTRZE</div>
+                        <div class="day-col-date" id="dayDate2"></div>
+                        <div id="dayTasks2" class="day-tasks"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============= ZADANIA ============= -->
+    <section class="view" id="view-tasks">
+        <div class="view-header">
+            <h2>✅ Zadania</h2>
+            <button class="primary-btn" id="openAddTask">➕ Nowe zadanie</button>
+        </div>
+
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">Wszystkie</button>
+            <button class="filter-btn" data-filter="active">W trakcie</button>
+            <button class="filter-btn" data-filter="done">Ukończone</button>
+            <button class="filter-btn" data-filter="overdue">Przeterminowane</button>
+        </div>
+
+        <div id="taskList" class="task-list"></div>
+    </section>
+
+    <!-- ============= TIMER ============= -->
+    <section class="view" id="view-timer">
+        <h2>⏱️ Timer sesji</h2>
+
+        <div class="timer-container">
+            <div class="timer-display" id="timerDisplay">00:00:00</div>
+
+            <div class="timer-task">
+                <label>Nad czym pracujesz?</label>
+                <select id="timerTaskSelect">
+                    <option value="">— wybierz zadanie lub zostaw puste —</option>
+                </select>
+            </div>
+
+            <div class="timer-controls">
+                <button class="primary-btn big pulse" id="timerStart">▶️ START</button>
+                <button class="danger-btn big hidden" id="timerStop">⏹️ STOP</button>
+            </div>
+
+            <p class="timer-hint" id="timerHint">Kliknij START, aby rozpocząć sesję. Czas i data zapiszą się automatycznie.</p>
+        </div>
+
+        <div class="card">
+            <h3>Historia sesji</h3>
+            <div id="activitiesList" class="activities-list"></div>
+        </div>
+    </section>
+
+    <!-- ============= DZIENNIK ============= -->
+    <section class="view" id="view-journal">
+        <h2>📓 Dziennik działań</h2>
+
+        <div class="card">
+            <h3>Nowy wpis — <span id="journalDateLabel"></span></h3>
+            <div class="mood-picker">
+                <label>Nastrój:</label>
+                <button class="mood-btn" data-mood="1">😫</button>
+                <button class="mood-btn" data-mood="2">😕</button>
+                <button class="mood-btn" data-mood="3">😐</button>
+                <button class="mood-btn" data-mood="4">🙂</button>
+                <button class="mood-btn" data-mood="5">🔥</button>
+            </div>
+            <textarea id="journalInput" placeholder="Co dziś zrobiłeś? Co się udało? Co możesz poprawić jutro?" rows="6"></textarea>
+            <button class="primary-btn" id="saveJournal">💾 Zapisz wpis (+10 XP)</button>
+        </div>
+
+        <div id="journalList" class="journal-list"></div>
+    </section>
+
+    <!-- ============= STATYSTYKI ============= -->
+    <section class="view" id="view-stats">
+        <h2>📊 Statystyki</h2>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-big" id="statTotalTasks">0</span>
+                <span class="stat-lbl">Wszystkich zadań</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-big" id="statCompletedTasks">0</span>
+                <span class="stat-lbl">Ukończonych</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-big" id="statTotalTime">0h</span>
+                <span class="stat-lbl">Łączny focus</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-big" id="statAvgDay">0m</span>
+                <span class="stat-lbl">Średnia dzienna</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Czas pracy — ostatnie 7 dni</h3>
+            <canvas id="chartWeekly"></canvas>
+        </div>
+
+        <div class="card">
+            <h3>Zadania ukończone — ostatnie 30 dni</h3>
+            <canvas id="chartMonthly"></canvas>
+        </div>
+
+        <div class="card">
+            <h3>Analiza AI produktywności</h3>
+            <div id="aiInsight" class="ai-insight">Zbieram dane...</div>
+        </div>
+    </section>
+
+    <!-- ============= KALENDARZ (z Do_zrobienia.xlsx) ============= -->
+    <section class="view" id="view-calendar">
+        <div class="view-header">
+            <h2>🗓️ Kalendarz i planer</h2>
+            <button class="primary-btn" id="openAddPlanned">➕ Zaplanuj zadanie</button>
+        </div>
+
+        <!-- PASEK NAWIGACJI PO MIESIĄCACH -->
+        <div class="cal-nav">
+            <button class="icon-btn" id="calPrev">‹</button>
+            <h3 id="calMonthLabel">—</h3>
+            <button class="icon-btn" id="calNext">›</button>
+            <button class="secondary-btn cal-today-btn" id="calToday">Dziś</button>
+        </div>
+
+        <!-- WIDOK MIESIĘCZNY KALENDARZA -->
+        <div class="card">
+            <div class="cal-weekdays">
+                <div>Pon</div><div>Wt</div><div>Śr</div><div>Czw</div><div>Pt</div><div>Sob</div><div>Nd</div>
+            </div>
+            <div id="calGrid" class="cal-grid"></div>
+        </div>
+
+        <!-- LISTA ZAPLANOWANYCH ZADAŃ Z "ZA X DNI" -->
+        <div class="card">
+            <h3>📋 Wszystkie zaplanowane zadania</h3>
+            <div class="filters">
+                <button class="filter-btn active" data-plan-filter="upcoming">Nadchodzące</button>
+                <button class="filter-btn" data-plan-filter="overdue">Zaległe</button>
+                <button class="filter-btn" data-plan-filter="done">Zrobione</button>
+                <button class="filter-btn" data-plan-filter="all">Wszystkie</button>
+            </div>
+            <div id="plannedList" class="planned-list"></div>
+        </div>
+
+        <!-- SZCZEGÓŁY WYBRANEGO DNIA -->
+        <div class="card hidden" id="dayDetailCard">
+            <h3 id="dayDetailTitle">Szczegóły dnia</h3>
+            <div id="dayDetailTasks"></div>
+            <button class="primary-btn" id="addTaskToDay">➕ Dodaj zadanie na ten dzień</button>
+        </div>
+    </section>
+
+    <!-- ============= NAWYKI + HYDRATION ============= -->
+    <section class="view" id="view-habits">
+        <div class="view-header">
+            <h2>💧 Nawyki i rytuały</h2>
+            <button class="primary-btn" id="openAddHabit">➕ Nowy nawyk</button>
+        </div>
+
+        <div class="habit-tabs">
+            <button class="tab-btn active" data-tab="daily">☀️ Codzienne</button>
+            <button class="tab-btn" data-tab="hydration">💧 Hydracja</button>
+            <button class="tab-btn" data-tab="heatmap">🔥 Heatmap</button>
+            <button class="tab-btn" data-tab="monthly">📅 Miesięczne</button>
+        </div>
+
+        <!-- TAB: CODZIENNE NAWYKI -->
+        <div class="habit-tab active" id="tab-daily">
+            <div class="card">
+                <h3>☀️ Poranek</h3>
+                <div id="habitsMorning" class="habits-list"></div>
+            </div>
+            <div class="card">
+                <h3>🌤️ W ciągu dnia</h3>
+                <div id="habitsDay" class="habits-list"></div>
+            </div>
+            <div class="card">
+                <h3>🌙 Wieczór</h3>
+                <div id="habitsNight" class="habits-list"></div>
+            </div>
+        </div>
+
+        <!-- TAB: HYDRATION -->
+        <div class="habit-tab" id="tab-hydration">
+            <div class="hydration-hero">
+                <div class="hydration-glass">
+                    <div class="hydration-fill" id="hydrationFill"></div>
+                    <div class="hydration-amount">
+                        <span id="hydrationMl">0</span>
+                        <small>/ 2000 ml</small>
+                    </div>
+                </div>
+                <p class="hydration-tag" id="hydrationTag">Kliknij pierwszy slot, by zacząć dzień</p>
+            </div>
+
+            <div class="hydration-slots" id="hydrationSlots"></div>
+
+            <div class="card">
+                <h3>📊 Hydracja — 7 dni</h3>
+                <canvas id="chartHydration"></canvas>
+            </div>
+        </div>
+
+        <!-- TAB: HEATMAP -->
+        <div class="habit-tab" id="tab-heatmap">
+            <div class="card">
+                <h3>🔥 Mapa konsekwencji — ostatnie 13 tygodni</h3>
+                <p class="subtitle">Każdy kwadrat to jeden dzień. Im ciemniejszy kolor, tym więcej wykonanych nawyków.</p>
+                <div id="heatmapContainer" class="heatmap"></div>
+                <div class="heatmap-legend">
+                    <span>Mniej</span>
+                    <div class="heatmap-cell lvl-0"></div>
+                    <div class="heatmap-cell lvl-1"></div>
+                    <div class="heatmap-cell lvl-2"></div>
+                    <div class="heatmap-cell lvl-3"></div>
+                    <div class="heatmap-cell lvl-4"></div>
+                    <span>Więcej</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: MIESIĘCZNE -->
+        <div class="habit-tab" id="tab-monthly">
+            <div class="card">
+                <h3>📅 Nawyki miesięczne</h3>
+                <p class="subtitle">Rzeczy, które robisz raz w miesiącu (np. zapłacić rachunki, deep clean, budżet).</p>
+                <div id="monthlyHabitsList" class="habits-list"></div>
+                <button class="secondary-btn" id="addMonthlyHabit">➕ Dodaj nawyk miesięczny</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============= OSIĄGNIĘCIA ============= -->
+    <section class="view" id="view-achievements">
+        <h2>🏆 Osiągnięcia</h2>
+        <p class="subtitle">Odblokuj wszystkie i stań się legendą.</p>
+        <div id="achievementsGrid" class="achievements-grid"></div>
+    </section>
+
+    <!-- ============= WYZWANIA ============= -->
+    <section class="view" id="view-challenges">
+        <h2>🔥 Wyzwania</h2>
+        <p class="subtitle">Podejmij wyzwanie 7 lub 30 dni i udowodnij sobie, że potrafisz.</p>
+
+        <div class="challenge-templates">
+            <div class="challenge-card">
+                <h3>💪 7 dni bez wymówek</h3>
+                <p>Każdego dnia minimum 1 ukończone zadanie.</p>
+                <button class="primary-btn" data-challenge="7days">Rozpocznij</button>
+            </div>
+            <div class="challenge-card">
+                <h3>🧠 30 dni deep work</h3>
+                <p>Każdego dnia min. 30 minut skupionej pracy.</p>
+                <button class="primary-btn" data-challenge="30days">Rozpocznij</button>
+            </div>
+            <div class="challenge-card">
+                <h3>📓 21 dni dziennika</h3>
+                <p>21 dni z rzędu wpis w dzienniku — buduj nawyk refleksji.</p>
+                <button class="primary-btn" data-challenge="21journal">Rozpocznij</button>
+            </div>
+        </div>
+
+        <h3>Twoje aktywne wyzwania</h3>
+        <div id="activeChallenges" class="active-challenges"></div>
+    </section>
+
+    <!-- ============= USTAWIENIA ============= -->
+    <section class="view" id="view-settings">
+        <h2>⚙️ Ustawienia</h2>
+
+        <div class="card">
+            <h3>Cel dzienny</h3>
+            <label>Ile zadań chcesz wykonać dziennie?</label>
+            <input type="number" id="dailyGoalInput" min="1" max="20" value="3" />
+            <button class="primary-btn" id="saveDailyGoal">Zapisz</button>
+        </div>
+
+        <div class="card">
+            <h3>Powiadomienia</h3>
+            <label class="switch">
+                <input type="checkbox" id="notifToggle" />
+                <span>Włącz przypomnienia w przeglądarce</span>
+            </label>
+            <small>Aplikacja przypomni Ci o pracy, jeśli zapomnisz.</small>
+        </div>
+
+        <div class="card">
+            <h3>💾 Eksport / Import danych</h3>
+            <p>Przenoś swoje dane między urządzeniami.</p>
+            <button class="primary-btn" id="exportBtn">⬇️ Eksportuj wszystko (JSON)</button>
+            <label class="primary-btn file-label">
+                ⬆️ Importuj z pliku
+                <input type="file" id="importFile" accept=".json" hidden />
+            </label>
+        </div>
+
+        <div class="card">
+            <h3>📲 Widgety (iOS + Android + Wear)</h3>
+            <p>Pobierz kompaktowy JSON ze streakiem — zasili widget na ekranie głównym lub na zegarku.</p>
+            <button class="primary-btn" id="exportWidget">⬇️ Pobierz dane dla widgetu</button>
+            <div class="widget-platforms">
+                <div class="platform-info">
+                    <strong>🍎 iOS / Apple Watch</strong>
+                    <small>Scriptable.app + Smart Stack lub natywna komplikacja (Swift)</small>
+                    <code>watch-widget/README.md</code>
+                </div>
+                <div class="platform-info">
+                    <strong>🤖 Android / Wear OS</strong>
+                    <small>PWA (WebAPK) + KWGT widget lub natywny Kotlin AppWidget + Wear OS Tile</small>
+                    <code>android-widget/README.md</code>
+                </div>
+            </div>
+        </div>
+
+        <div class="card danger-card">
+            <h3>⚠️ Strefa niebezpieczna</h3>
+            <button class="danger-btn" id="resetAll">Zresetuj wszystkie dane</button>
+        </div>
+    </section>
+</main>
+
+<!-- =========================================================
+     MODAL — DODAWANIE ZADANIA
+     ========================================================= -->
+<div class="modal-overlay hidden" id="taskModal">
+    <div class="modal">
+        <h3>Nowe zadanie</h3>
+        <label>Tytuł *</label>
+        <input type="text" id="taskTitle" placeholder="Np. Napisać rozdział książki" />
+
+        <label>Opis</label>
+        <textarea id="taskDesc" rows="3" placeholder="Szczegóły, kontekst..."></textarea>
+
+        <div class="row">
+            <div>
+                <label>Data rozpoczęcia</label>
+                <input type="date" id="taskStart" />
+            </div>
+            <div>
+                <label>Termin</label>
+                <input type="date" id="taskEnd" />
+            </div>
+        </div>
+
+        <label>Priorytet / punkty (XP)</label>
+        <select id="taskPoints">
+            <option value="10">🟢 Łatwe — 10 XP</option>
+            <option value="25" selected>🟡 Średnie — 25 XP</option>
+            <option value="50">🟠 Trudne — 50 XP</option>
+            <option value="100">🔴 Ekstremalne — 100 XP</option>
+        </select>
+
+        <div class="modal-actions">
+            <button class="secondary-btn" id="cancelTask">Anuluj</button>
+            <button class="primary-btn" id="saveTask">Zapisz zadanie</button>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     MODAL — DODAWANIE NAWYKU
+     ========================================================= -->
+<div class="modal-overlay hidden" id="habitModal">
+    <div class="modal">
+        <h3>Nowy nawyk</h3>
+        <label>Nazwa *</label>
+        <input type="text" id="habitName" placeholder="Np. Medytacja 10 min" />
+
+        <label>Ikona</label>
+        <div class="icon-grid" id="habitIconGrid"></div>
+        <input type="hidden" id="habitIcon" value="✨" />
+
+        <label>Pora dnia</label>
+        <select id="habitGroup">
+            <option value="morning">☀️ Poranek</option>
+            <option value="day" selected>🌤️ W ciągu dnia</option>
+            <option value="night">🌙 Wieczór</option>
+        </select>
+
+        <label>Typ</label>
+        <select id="habitType">
+            <option value="daily" selected>Codzienny</option>
+            <option value="monthly">Miesięczny</option>
+        </select>
+
+        <div class="modal-actions">
+            <button class="secondary-btn" id="cancelHabit">Anuluj</button>
+            <button class="primary-btn" id="saveHabit">Zapisz nawyk</button>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     TOAST / POWIADOMIENIA
+     ========================================================= -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- =========================================================
+     TRYB FOCUS — PEŁNY EKRAN
+     ========================================================= -->
+<div class="focus-mode hidden" id="focusMode">
+    <div class="focus-content">
+        <p class="focus-label">Tryb skupienia • rozpraszacze zablokowane</p>
+        <div class="focus-timer" id="focusTimer">00:00:00</div>
+        <p class="focus-task" id="focusTaskName">Głęboka praca</p>
+        <button class="danger-btn big" id="exitFocus">✖ Zakończ sesję</button>
+    </div>
+</div>
+
+<!-- =========================================================
+     ANIMACJA LEVEL-UP
+     ========================================================= -->
+<div class="level-up hidden" id="levelUpScreen">
+    <div class="level-up-box">
+        <div class="level-up-title">POZIOM W GÓRĘ!</div>
+        <div class="level-up-num" id="levelUpNum">2</div>
+        <p>Jesteś coraz bliżej mistrzostwa.</p>
+    </div>
+</div>
+
+<script src="script.js"></script>
+<script>
+    // Rejestracja service workera dla PWA (offline + instalacja)
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW register failed:', err));
+        });
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+    "name": "Motywacja bez granic",
+    "short_name": "MBG",
+    "description": "Twój system dyscypliny — zadania, focus timer, nawyki, streaki, gamifikacja.",
+    "start_url": "./index.html",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#0a0e1a",
+    "theme_color": "#6366f1",
+    "lang": "pl-PL",
+    "categories": ["productivity", "lifestyle", "health"],
+    "icons": [
+        {
+            "src": "icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "icon-maskable.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Szybki timer",
+            "short_name": "Timer",
+            "description": "Rozpocznij sesję focus",
+            "url": "./index.html#timer",
+            "icons": [{ "src": "icon.svg", "sizes": "any" }]
+        },
+        {
+            "name": "Nowe zadanie",
+            "short_name": "Zadanie",
+            "url": "./index.html#tasks"
+        },
+        {
+            "name": "Dziennik",
+            "short_name": "Dziennik",
+            "url": "./index.html#journal"
+        }
+    ]
+}

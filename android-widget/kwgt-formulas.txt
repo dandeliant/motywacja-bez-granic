@@ -1,0 +1,66 @@
+═══════════════════════════════════════════════════════════════
+KWGT — FORMUŁY DLA MBG WIDGET (copy & paste)
+═══════════════════════════════════════════════════════════════
+
+SETUP:
+1. KWGT Editor → Globals → Add Global → Text
+   Name: data_url
+   Value: https://gist.githubusercontent.com/YOUR_USER/HASH/raw/mbg.json
+
+2. Dodaj komponenty tekstowe z poniższymi formułami:
+
+
+── STREAK (🔥 liczba) ──────────────────────────────────────────
+
+    $wg(gv(data_url), json, streak)$
+
+
+── POZIOM (LVL N) ──────────────────────────────────────────────
+
+    LVL $wg(gv(data_url), json, level)$
+
+
+── PUNKTY XP ───────────────────────────────────────────────────
+
+    $wg(gv(data_url), json, points)$ XP
+
+
+── KOMBO: "🔥 7 dni • LVL 3 • 425 XP" ──────────────────────────
+
+    🔥 $wg(gv(data_url), json, streak)$ dni • LVL $wg(gv(data_url), json, level)$ • $wg(gv(data_url), json, points)$ XP
+
+
+── OSTATNIA AKTYWNOŚĆ (relative date) ──────────────────────────
+
+    $df(d MMM, tu($wg(gv(data_url), json, lastActive))*1000)$
+
+
+── KOLOR ZALEŻNY OD STREAKA (0=szary, 7+=ogień, 30+=złoto) ─────
+
+    $if($wg(gv(data_url), json, streak) >= 30, #FFFBBF24,
+        if($wg(gv(data_url), json, streak) >= 7, #FFEF4444, #FF8B95A7))$
+
+   Wklej jako "Color" w zakładce Paint dla komponentu tekstowego.
+
+
+── AKCJA ON-TAP (otwórz MBG w przeglądarce) ────────────────────
+
+    Touch → Tap → Launch URI → https://twoja-domena.pl/index.html
+
+
+── BACKGROUND GRADIENT (dopasowany do MBG) ─────────────────────
+
+    Shape → Rectangle → Corners 20dp
+    Paint → Gradient → Linear
+      Color 1: #1a2234
+      Color 2: #0a0e1a
+      Angle: 135°
+
+
+═══════════════════════════════════════════════════════════════
+TIPS:
+  - Żeby odświeżyć natychmiast: KWGT → Settings → Cache → Clear
+  - Odświeżanie automatyczne: co 30 min (Android sam decyduje)
+  - Żeby przyspieszyć: KWGT → Globals → Add Global → "Trigger"
+    typu "Every X minutes" → skróci interval
+═══════════════════════════════════════════════════════════════

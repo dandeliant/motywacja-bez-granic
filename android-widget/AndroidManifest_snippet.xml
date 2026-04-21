@@ -1,0 +1,23 @@
+<!--
+    Snippet do wklejenia w AndroidManifest.xml wewnątrz <application>.
+    Rejestruje MBGWidgetProvider jako receiver + link do metadanych.
+-->
+
+<receiver
+    android:name="pl.mbg.widget.MBGWidgetProvider"
+    android:exported="true"
+    android:label="@string/widget_label">
+
+    <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="pl.mbg.widget.REFRESH" />
+    </intent-filter>
+
+    <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/mbg_widget_info" />
+</receiver>
+
+<!-- Uprawnienie do pobierania danych z URL -->
+<!-- Dodaj nad <application>: -->
+<!-- <uses-permission android:name="android.permission.INTERNET" /> -->

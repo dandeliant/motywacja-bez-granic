@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(pip install *)",
+      "Bash(node -c script.js)",
+      "Bash(python -c \"import json; json.load\\(open\\('manifest.json'\\)\\); print\\('manifest OK'\\)\")",
+      "Bash(gh --version)",
+      "Bash(git --version)",
+      "Bash(gh auth *)",
+      "Bash(where.exe gh *)"
+    ]
+  }
+}

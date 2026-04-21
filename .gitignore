@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Dependencies (gdyby kiedyś doszedł backend)
+node_modules/
+__pycache__/
+*.pyc
+
+# Lokalne kopie / eksporty użytkownika
+*backup*.json
+mbg-backup-*.json
+mbg-widget-data.json
+
+# Build outputs (na wypadek modułu Android)
+android-widget/build/
+android-widget/.gradle/
+*.apk
