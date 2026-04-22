@@ -262,7 +262,40 @@ function switchView(viewName) {
 }
 
 $$('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchView(btn.dataset.view));
+    btn.addEventListener('click', () => {
+        switchView(btn.dataset.view);
+        closeSidebar(); // po wyborze zakładki zamknij menu
+    });
+});
+
+/* ====== MENU HAMBURGER (drawer) ====== */
+const sidebarEl = $('.sidebar');
+const overlayEl = $('#sidebarOverlay');
+const hamburgerEl = $('#hamburger');
+
+function openSidebar() {
+    sidebarEl.classList.add('open');
+    overlayEl.classList.add('active');
+    hamburgerEl.classList.add('active');
+    hamburgerEl.textContent = '✕';
+}
+
+function closeSidebar() {
+    sidebarEl.classList.remove('open');
+    overlayEl.classList.remove('active');
+    hamburgerEl.classList.remove('active');
+    hamburgerEl.textContent = '☰';
+}
+
+hamburgerEl?.addEventListener('click', () => {
+    sidebarEl.classList.contains('open') ? closeSidebar() : openSidebar();
+});
+
+overlayEl?.addEventListener('click', closeSidebar);
+
+// ESC zamyka menu
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebarEl.classList.contains('open')) closeSidebar();
 });
 
 /* =============================================================
