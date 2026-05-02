@@ -18,6 +18,11 @@
 
     <!-- Chart.js do wizualizacji postępów -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Fonty dla Mówiącego Zegara -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,700;0,900;1,500&family=JetBrains+Mono:wght@300;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -39,6 +44,7 @@
         <button class="nav-btn" data-view="stats">📊 <span>Statystyki</span></button>
         <button class="nav-btn" data-view="habits">💧 <span>Nawyki</span></button>
         <button class="nav-btn" data-view="calendar">🗓️ <span>Kalendarz</span></button>
+        <button class="nav-btn" data-view="clock">🕐 <span>Mówiący zegar</span></button>
         <button class="nav-btn" data-view="achievements">🏆 <span>Osiągnięcia</span></button>
         <button class="nav-btn" data-view="challenges">🔥 <span>Wyzwania</span></button>
         <button class="nav-btn" data-view="settings">⚙️ <span>Ustawienia</span></button>
@@ -318,6 +324,171 @@
         </div>
     </section>
 
+    <!-- ============= MÓWIĄCY ZEGAR + MINUTNIK + ALARMY ============= -->
+    <section class="view" id="view-clock">
+        <div class="view-header">
+            <h2>🕐 Mówiący zegar</h2>
+            <div class="seg" id="clkLangSeg">
+                <button data-lang="pl" class="on">PL</button>
+                <button data-lang="en">EN</button>
+            </div>
+        </div>
+
+        <div class="clock-tabs">
+            <button class="clock-tab active" data-clock-tab="clock">🕐 Zegar</button>
+            <button class="clock-tab" data-clock-tab="timer">⏲️ Minutnik</button>
+            <button class="clock-tab" data-clock-tab="alarms">🔔 Alarmy <span class="count" id="clkAlarmsCount">0</span></button>
+        </div>
+
+        <!-- ZEGAR -->
+        <div class="clock-tab-pane active" id="clkTab-clock">
+            <div class="clock-grid">
+                <!-- Analog SVG -->
+                <div class="analog-wrap">
+                    <svg class="analog" viewBox="0 0 200 200" aria-hidden="true">
+                        <circle class="face-bg" cx="100" cy="100" r="95"/>
+                        <circle class="face-ring" cx="100" cy="100" r="95" stroke-width="1.5"/>
+                        <circle class="face-ring" cx="100" cy="100" r="89" stroke-width="0.5" opacity="0.5"/>
+                        <g id="clkAnalogMarks"></g>
+                        <g id="clkAnalogNums"></g>
+                        <line class="hand-hour" id="clkHandHour" x1="100" y1="100" x2="100" y2="55"/>
+                        <line class="hand-min"  id="clkHandMin"  x1="100" y1="100" x2="100" y2="35"/>
+                        <line class="hand-sec"  id="clkHandSec"  x1="100" y1="108" x2="100" y2="28"/>
+                        <circle class="center-dot" cx="100" cy="100" r="5"/>
+                        <circle class="center-inner" cx="100" cy="100" r="1.8"/>
+                    </svg>
+                </div>
+
+                <!-- Digital + frazka -->
+                <div class="digital-side">
+                    <div class="stage-label" id="clkLabelTime">Aktualny czas</div>
+                    <div class="digital">
+                        <span id="clkHH">00</span>
+                        <span class="sep">:</span>
+                        <span id="clkMM">00</span>
+                    </div>
+                    <div class="seconds-row">
+                        <span class="seconds-num" id="clkSS">00</span>
+                        <div class="progress" id="clkProgress" style="--pct:0%"></div>
+                        <span class="period" id="clkPeriod">AM</span>
+                    </div>
+
+                    <div class="phrase-stage">
+                        <div class="stage-label">
+                            <span id="clkLabelHowToSay">Jak to powiedzieć</span>
+                            <span class="speaker" id="clkSpeaker"><i></i><i></i><i></i><i></i></span>
+                        </div>
+                        <div class="phrase" id="clkPhrase"></div>
+                        <div class="phrase-hint" id="clkNextInfo"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="clock-controls">
+                <div class="field">
+                    <label id="clkLabelVoice">Głos lektora</label>
+                    <select id="clkVoice"></select>
+                </div>
+                <div class="field">
+                    <label id="clkLabelFormat">Format godziny</label>
+                    <div class="seg-tabs" id="clkHourModeSeg">
+                        <button data-mode="12" class="on">12h</button>
+                        <button data-mode="24">24h</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label id="clkLabelInterval">Zapowiedź głosowa</label>
+                    <select id="clkInterval">
+                        <option value="0">Wyłączona</option>
+                        <option value="1">Co minutę</option>
+                        <option value="5">Co 5 minut</option>
+                        <option value="10">Co 10 minut</option>
+                        <option value="15" selected>Co kwadrans</option>
+                        <option value="30">Co pół godziny</option>
+                        <option value="60">Co godzinę</option>
+                    </select>
+                </div>
+                <button class="primary-btn" id="clkSpeakBtn">🔊 <span id="clkSpeakLbl">Powtórz teraz</span></button>
+                <button class="secondary-btn" id="clkWakeBtn">💡 <span id="clkWakeLbl">Nie pozwól zasnąć</span></button>
+            </div>
+        </div>
+
+        <!-- MINUTNIK -->
+        <div class="clock-tab-pane" id="clkTab-timer">
+            <div class="timer-stage">
+                <div class="timer-display" id="clkTimerDisplay">05:00</div>
+                <div class="timer-progress" id="clkTimerProgress" style="--pct:0%"></div>
+                <div class="timer-label" id="clkTimerLabel">Gotowy do startu</div>
+
+                <div class="timer-presets" id="clkTimerPresets">
+                    <button class="timer-preset" data-mins="1">1 min</button>
+                    <button class="timer-preset" data-mins="3">3 min</button>
+                    <button class="timer-preset active" data-mins="5">5 min</button>
+                    <button class="timer-preset" data-mins="10">10 min</button>
+                    <button class="timer-preset" data-mins="15">15 min</button>
+                    <button class="timer-preset" data-mins="25">25 min</button>
+                    <button class="timer-preset" data-mins="30">30 min</button>
+                    <button class="timer-preset" data-mins="45">45 min</button>
+                    <button class="timer-preset" data-mins="60">60 min</button>
+                </div>
+
+                <div class="timer-custom">
+                    <label id="clkCustomLbl">Lub ustaw</label>
+                    <input type="number" id="clkTimerInput" min="1" max="180" step="1" value="5" inputmode="numeric">
+                    <label id="clkCustomUnit">minut</label>
+                </div>
+
+                <div class="timer-actions">
+                    <button class="primary-btn big-btn" id="clkTimerStart">▶️ <span id="clkTimerStartLbl">Start</span></button>
+                    <button class="secondary-btn big-btn" id="clkTimerReset">🔄 Reset</button>
+                </div>
+                <p class="clock-hint">💡 Minutnik powie po polsku/angielsku ile zostało (1 min, 30 s, 10 s) i piknie na końcu. Nie koliduje z timerem focus na karcie „Timer".</p>
+            </div>
+        </div>
+
+        <!-- ALARMY -->
+        <div class="clock-tab-pane" id="clkTab-alarms">
+            <div class="alarms-head">
+                <h3 id="clkAlarmsTitle">Twoje alarmy <em id="clkAlarmsStatus"></em></h3>
+                <button class="primary-btn" id="clkAddAlarmBtn">➕ <span id="clkAddAlarmLbl">Dodaj alarm</span></button>
+            </div>
+
+            <div class="alarm-form" id="clkAlarmForm">
+                <h4 id="clkAlarmFormTitle">Nowy alarm</h4>
+                <div class="form-grid">
+                    <label id="clkFormTimeLbl">Godzina</label>
+                    <input type="time" id="clkAlarmTime" value="07:30">
+
+                    <label id="clkFormPhraseLbl">Fraza</label>
+                    <input type="text" id="clkAlarmText" placeholder="np. Dzień dobry, pora wstawać" maxlength="140">
+
+                    <label id="clkFormDaysLbl">Dni</label>
+                    <div>
+                        <div class="day-chips" id="clkDayChips"></div>
+                        <div class="quick-days">
+                            <button data-quick="all" id="clkQuickAll">Codziennie</button>
+                            <button data-quick="week" id="clkQuickWeek">Dni powszednie</button>
+                            <button data-quick="weekend" id="clkQuickWeekend">Weekend</button>
+                            <button data-quick="none" id="clkQuickNone">Wyczyść</button>
+                        </div>
+                    </div>
+
+                    <label id="clkFormLangLbl">Język frazy</label>
+                    <div class="seg-tabs" id="clkAlarmLangSeg" style="max-width:220px">
+                        <button data-lang="pl" class="on">PL</button>
+                        <button data-lang="en">EN</button>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button class="secondary-btn" id="clkAlarmCancel">Anuluj</button>
+                    <button class="primary-btn" id="clkAlarmSave">Zapisz alarm</button>
+                </div>
+            </div>
+
+            <div class="alarms-list" id="clkAlarmsList"></div>
+        </div>
+    </section>
+
     <!-- ============= NAWYKI + HYDRATION ============= -->
     <section class="view" id="view-habits">
         <div class="view-header">
@@ -576,6 +747,15 @@
 </div>
 
 <!-- =========================================================
+     ALARM URUCHOMIONY — FULLSCREEN OVERLAY
+     ========================================================= -->
+<div class="firing" id="clkFiring" role="alertdialog" aria-modal="true">
+    <div class="firing-time" id="clkFiringTime">00:00</div>
+    <div class="firing-text" id="clkFiringText">—</div>
+    <button class="primary-btn big-btn" id="clkFiringDismiss">✖ Wyłącz alarm</button>
+</div>
+
+<!-- =========================================================
      ANIMACJA LEVEL-UP
      ========================================================= -->
 <div class="level-up hidden" id="levelUpScreen">
@@ -587,6 +767,7 @@
 </div>
 
 <script src="script.js"></script>
+<script src="clock.js"></script>
 <script>
     // Rejestracja service workera dla PWA (offline + instalacja)
     if ('serviceWorker' in navigator) {
