@@ -36,7 +36,9 @@ const DEFAULT_STATE = {
     timer: {
         running: false,
         startedAt: null,
-        taskId: null
+        taskId: null,
+        pomodoroTarget: null,        // sekundy — gdy ustawione, działa tryb pomodoro
+        pomodoroCelebrated: false    // żeby fanfary zagrały tylko raz
     }
 };
 
@@ -476,6 +478,8 @@ function stopTimer() {
     state.timer.running = false;
     state.timer.startedAt = null;
     state.timer.taskId = null;
+    state.timer.pomodoroTarget = null;
+    state.timer.pomodoroCelebrated = false;
 
     clearInterval(timerInterval);
     $('#timerDisplay').textContent = '00:00:00';
@@ -507,14 +511,141 @@ function tickTimer() {
 
     const task = state.timer.taskId ? state.tasks.find(t => t.id === state.timer.taskId) : null;
     $('#focusTaskName').textContent = task ? task.title : 'Głęboka praca';
+
+    // Tryb pomodoro — odliczanie do zera + celebracja
+    if (state.timer.pomodoroTarget) {
+        const target = state.timer.pomodoroTarget;
+        const remaining = Math.max(0, target - elapsed);
+        const mm = Math.floor(remaining / 60);
+        const ss = remaining % 60;
+        const display = `${mm}:${String(ss).padStart(2, '0')}`;
+
+        const cd = $('#pomodoroCountdown');
+        if (cd) {
+            cd.textContent = display;
+            cd.classList.toggle('done', remaining === 0);
+        }
+        const bar = $('#pomodoroBar');
+        if (bar) bar.style.width = Math.min(100, (elapsed / target) * 100) + '%';
+
+        const pill = $('#pomodoroPillTime');
+        if (pill) pill.textContent = display;
+
+        // Celebracja po osiągnięciu celu (tylko raz)
+        if (remaining === 0 && !state.timer.pomodoroCelebrated) {
+            state.timer.pomodoroCelebrated = true;
+            saveState();
+            celebratePomodoro(Math.floor(target / 60));
+        }
+    }
+}
+
+/* === CHIME — trzytonowa gama (Web Audio API) === */
+let pomAudioCtx = null;
+function playChime() {
+    try {
+        if (!pomAudioCtx) pomAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = pomAudioCtx;
+        const notes = [523.25, 659.25, 783.99]; // C5, E5, G5 — radosny akord
+        notes.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.type = 'sine';
+            const t0 = ctx.currentTime + i * 0.18;
+            osc.frequency.setValueAtTime(freq, t0);
+            gain.gain.setValueAtTime(0.001, t0);
+            gain.gain.exponentialRampToValueAtTime(0.25, t0 + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.5);
+            osc.start(t0);
+            osc.stop(t0 + 0.55);
+        });
+    } catch (e) {}
+}
+
+function celebratePomodoro(minutes) {
+    playChime();
+    const card = $('#pomodoroCard');
+    if (card) {
+        card.classList.add('celebrate');
+        setTimeout(() => card.classList.remove('celebrate'), 1700);
+    }
+    toast(`🎉 Brawo! ${minutes} min za Tobą`, 'Mózg jest rozgrzany — kontynuuj albo zatrzymaj. Twój wybór.', 'success');
+    // Bonusowe XP za ukończony pomodoro
+    addXP(minutes);
+    if (state.settings.notifications && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('🍅 Pomodoro zakończone', {
+            body: `Brawo! ${minutes} minut zrobione. +${minutes} XP bonusu.`,
+            icon: './icon.svg'
+        });
+    }
+}
+
+/* === START / STOP POMODORO === */
+function startPomodoro(mins) {
+    state.timer.pomodoroTarget = mins * 60;
+    state.timer.pomodoroCelebrated = false;
+    if (!state.timer.running) {
+        startTimer(); // używa istniejącego startTimer
+    }
+    saveState();
+    renderPomodoroUI();
+    toast(`🍅 Działasz! ${mins} min`, 'Bez wymówek. Zacząłeś — to już jest sukces.', 'success');
+}
+
+function stopPomodoro() {
+    state.timer.pomodoroTarget = null;
+    state.timer.pomodoroCelebrated = false;
+    saveState();
+    if (state.timer.running) stopTimer();
+    renderPomodoroUI();
+}
+
+/* === RENDER POMODORO UI === */
+function renderPomodoroUI() {
+    const active = $('#pomodoroActive');
+    const buttons = $('#pomodoroButtons');
+    const pill = $('#pomodoroPill');
+    const isPom = !!(state.timer.running && state.timer.pomodoroTarget);
+
+    if (active && buttons) {
+        active.classList.toggle('hidden', !isPom);
+        buttons.classList.toggle('hidden', isPom);
+    }
+    if (pill) pill.classList.toggle('hidden', !isPom);
+
+    if (isPom) {
+        const mins = Math.floor(state.timer.pomodoroTarget / 60);
+        const lbl = $('#pomodoroTargetLbl');
+        if (lbl) lbl.textContent = `${mins} min`;
+        // Wymuś jedną aktualizację countdown od razu
+        tickTimer();
+    }
 }
 
 $('#timerStart').addEventListener('click', () => startTimer());
 $('#timerStop').addEventListener('click', stopTimer);
-$('#quickStartTimer').addEventListener('click', () => {
+$('#quickStartTimer')?.addEventListener('click', () => {
     switchView('timer');
     startTimer();
 });
+
+/* === POMODORO — handlery przycisków === */
+document.querySelectorAll('.pomodoro-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const mins = parseInt(btn.dataset.pom, 10);
+        if (mins > 0) startPomodoro(mins);
+    });
+});
+
+$('#pomodoroStop')?.addEventListener('click', () => {
+    if (confirm('Zakończyć sesję? Czas zostanie zapisany.')) {
+        stopPomodoro();
+    }
+});
+
+// Klik w pigułkę topbar = przeskocz do dashboardu (gdzie jest duże odliczanie)
+$('#pomodoroPill')?.addEventListener('click', () => switchView('dashboard'));
 
 function renderActivities() {
     const list = $('#activitiesList');
@@ -902,6 +1033,9 @@ function renderDashboard() {
 
     // Karty Dziś / Jutro / Pojutrze
     renderThreeDays();
+
+    // Pomodoro UI (aktywne odliczanie vs przyciski)
+    renderPomodoroUI();
 }
 
 /* =============================================================
@@ -1657,8 +1791,13 @@ function init() {
         $('#timerStart').classList.add('hidden');
         $('#timerStop').classList.remove('hidden');
         timerInterval = setInterval(tickTimer, 200);
-        toast('⏱️ Timer wznowiony', 'Sesja wciąż trwa', '');
+        const msg = state.timer.pomodoroTarget
+            ? `🍅 Pomodoro wciąż trwa (${Math.floor(state.timer.pomodoroTarget / 60)} min)`
+            : 'Sesja wciąż trwa';
+        toast('⏱️ Timer wznowiony', msg, '');
     }
+    // Pokaż pigułkę topbar od razu jeśli pomodoro aktywne
+    renderPomodoroUI();
 
     seedDefaultHabits();
     renderHeader();

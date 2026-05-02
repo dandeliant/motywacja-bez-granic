@@ -64,6 +64,13 @@
 
 <header class="topbar">
     <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
+
+    <!-- Pigułka pomodoro — widoczna tylko gdy trwa sesja -->
+    <div class="pom-pill hidden" id="pomodoroPill">
+        <span class="pom-pill-icon">🍅</span>
+        <span class="pom-pill-time" id="pomodoroPillTime">5:00</span>
+    </div>
+
     <div class="user-stats">
         <div class="stat-chip level-chip">
             <span class="chip-label">LVL</span>
@@ -131,9 +138,39 @@
                 <p class="daily-goal-txt" id="dailyGoalTxt">0 / 3 zadań — gotów na małe zwycięstwo?</p>
             </div>
 
-            <div class="card">
-                <h3>⚡ Szybki start</h3>
-                <button class="primary-btn big" id="quickStartTimer">▶️ Rozpocznij sesję focus</button>
+            <div class="card pomodoro-card" id="pomodoroCard">
+                <h3>🍅 Pomodoro — bez wymówek</h3>
+
+                <!-- Aktywne odliczanie -->
+                <div class="pomodoro-active hidden" id="pomodoroActive">
+                    <div class="pom-target">🍅 cel: <span id="pomodoroTargetLbl">5 min</span></div>
+                    <div class="pom-countdown" id="pomodoroCountdown">5:00</div>
+                    <div class="pom-progress"><div id="pomodoroBar"></div></div>
+                    <button class="secondary-btn" id="pomodoroStop">⏹️ Zatrzymaj sesję</button>
+                </div>
+
+                <!-- Przyciski startowe -->
+                <div class="pomodoro-buttons" id="pomodoroButtons">
+                    <button class="pomodoro-btn hero" data-pom="5">
+                        <div class="pom-num-big">5</div>
+                        <div class="pom-unit">minut</div>
+                        <div class="pom-cta">▶ Zacznij TERAZ</div>
+                    </button>
+                    <div class="pomodoro-row">
+                        <button class="pomodoro-btn" data-pom="25">
+                            <strong>25 min</strong>
+                            <small>🍅 Pomodoro</small>
+                        </button>
+                        <button class="pomodoro-btn" data-pom="50">
+                            <strong>50 min</strong>
+                            <small>🧠 Deep work</small>
+                        </button>
+                    </div>
+                </div>
+
+                <p class="pom-note">💡 Po pierwszych 5 minutach mózg sam chce kontynuować.</p>
+
+                <hr class="card-divider">
                 <button class="secondary-btn" id="quickAddTask">➕ Dodaj zadanie</button>
                 <button class="secondary-btn" id="quickJournal">✍️ Wpis do dziennika</button>
             </div>
