@@ -825,8 +825,12 @@ function showTranslationView(entryId, lang, text) {
     view.classList.remove('hidden');
 }
 
+// === ABORT TOKEN — unieważnia stare callbacki gdy startuje nowy odczyt ===
+let speakAbortToken = 0;
+
 // Zatrzymaj odczyt (uniwersalna funkcja)
 function stopJournalSpeak() {
+    speakAbortToken++; // ważne: invalidate przed cancel, żeby onend nie startował kolejnego chunku
     try { speechSynthesis.cancel(); } catch (e) {}
     document.querySelectorAll('.lang-badge.speaking, .icon-btn.speaking').forEach(b => b.classList.remove('speaking'));
     journalSpeakingActive = false;
@@ -836,7 +840,47 @@ function stopJournalSpeak() {
     emitTTSState(false);
 }
 
-// Główna funkcja czytania
+/* === CHUNKOWANIE TEKSTU ===
+   Chrome ma bug: zatrzymuje speechSynthesis po ~15 sek przy długich tekstach.
+   Rozwiązanie: dzielimy tekst na krótkie kawałki (~180 znaków) na granicach zdań/przecinków/spacji.
+   Każdy chunk to świeży utterance, więc bug nie ma jak się włączyć. */
+function chunkText(text, maxLen = 180) {
+    text = text.trim();
+    if (text.length <= maxLen) return [text];
+
+    const chunks = [];
+    let remaining = text;
+    while (remaining.length > maxLen) {
+        const head = remaining.slice(0, maxLen);
+        let splitAt = -1;
+
+        // 1. Najlepiej: koniec zdania (. ! ? …)
+        const sentMatch = head.match(/.*[.!?…]\s/);
+        if (sentMatch) splitAt = sentMatch[0].length;
+
+        // 2. Przecinek (jeśli w połowie lub dalej)
+        if (splitAt < maxLen * 0.5) {
+            const idx = head.lastIndexOf(',');
+            if (idx > maxLen * 0.4) splitAt = idx + 1;
+        }
+
+        // 3. Ostatnia spacja
+        if (splitAt < maxLen * 0.3) {
+            const idx = head.lastIndexOf(' ');
+            if (idx > 0) splitAt = idx;
+        }
+
+        // 4. Twarde cięcie
+        if (splitAt <= 0) splitAt = maxLen;
+
+        chunks.push(remaining.slice(0, splitAt).trim());
+        remaining = remaining.slice(splitAt).trim();
+    }
+    if (remaining) chunks.push(remaining);
+    return chunks.filter(c => c.length > 0);
+}
+
+// Główna funkcja czytania (z chunkowaniem)
 function speakJournalText(text, bcpCode, badgeEl = null, entryId = null, lang = null) {
     if (!('speechSynthesis' in window)) {
         toast('Brak TTS', 'Twoja przeglądarka nie obsługuje syntezy mowy', 'warning');
@@ -849,60 +893,68 @@ function speakJournalText(text, bcpCode, badgeEl = null, entryId = null, lang = 
         return;
     }
 
-    // Zatrzymaj poprzednie (różny badge lub nic nie gra)
+    // Zatrzymaj poprzednie i zwiększ token
+    speakAbortToken++;
     try { speechSynthesis.cancel(); } catch (e) {}
     document.querySelectorAll('.lang-badge.speaking, .icon-btn.speaking').forEach(b => b.classList.remove('speaking'));
 
     // Pokaż tłumaczenie w wpisie (jeśli nie polski)
     showTranslationView(entryId, lang, text);
 
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = bcpCode;
-    const v = pickBestJournalVoice(bcpCode);
-    if (v) u.voice = v;
-    u.rate = 0.95;
-    u.pitch = 1.0;
-    u.volume = 1.0;
+    const voice = pickBestJournalVoice(bcpCode);
+    const chunks = chunkText(text);
+    const myToken = speakAbortToken;
 
     // Stan
     journalSpeakingActive = true;
     journalCurrentBadge = badgeEl;
-    journalCurrentUtterance = u;
     if (badgeEl) badgeEl.classList.add('speaking');
     showSpeechBar(lang || 'pl', text);
     emitTTSState(true);
 
-    const endHandler = () => {
+    const finish = () => {
+        if (myToken !== speakAbortToken) return; // unieważnione przez stop / inny speak
+        journalSpeakingActive = false;
+        journalCurrentBadge = null;
+        journalCurrentUtterance = null;
         if (badgeEl) badgeEl.classList.remove('speaking');
-        if (journalCurrentBadge === badgeEl) {
-            journalSpeakingActive = false;
-            journalCurrentBadge = null;
-            journalCurrentUtterance = null;
-            hideSpeechBar();
-            emitTTSState(false);
-        }
+        hideSpeechBar();
+        emitTTSState(false);
     };
-    u.onend = endHandler;
-    u.onerror = endHandler;
 
-    speechSynthesis.speak(u);
+    const speakChunk = (idx) => {
+        if (myToken !== speakAbortToken) return; // zatrzymane
+        if (idx >= chunks.length) { finish(); return; }
 
-    // Bezpiecznik: Chrome czasem zatrzymuje TTS przy dłuższym tekście — keepalive trick
-    keepSpeechAlive();
-}
+        const u = new SpeechSynthesisUtterance(chunks[idx]);
+        u.lang = bcpCode;
+        if (voice) u.voice = voice;
+        u.rate = 0.95;
+        u.pitch = 1.0;
+        u.volume = 1.0;
 
-// Workaround: Chrome zatrzymuje speechSynthesis po ~15 sek bez tego
-let speechKeepAliveTimer = null;
-function keepSpeechAlive() {
-    clearInterval(speechKeepAliveTimer);
-    speechKeepAliveTimer = setInterval(() => {
-        if (speechSynthesis.speaking && !speechSynthesis.paused) {
-            speechSynthesis.pause();
-            speechSynthesis.resume();
-        } else {
-            clearInterval(speechKeepAliveTimer);
-        }
-    }, 12000);
+        u.onend = () => {
+            if (myToken === speakAbortToken) {
+                // Mała pauza między chunkami (naturalna płynność)
+                setTimeout(() => speakChunk(idx + 1), 40);
+            }
+        };
+        u.onerror = (err) => {
+            console.warn('[TTS] chunk error', err);
+            if (myToken === speakAbortToken) {
+                // Spróbuj kolejny chunk mimo błędu — niech audio nie znika
+                setTimeout(() => speakChunk(idx + 1), 40);
+            }
+        };
+
+        journalCurrentUtterance = u;
+        speechSynthesis.speak(u);
+    };
+
+    // Krótkie opóźnienie po cancel, żeby Chrome zdążył wyczyścić kolejkę
+    setTimeout(() => {
+        if (myToken === speakAbortToken) speakChunk(0);
+    }, 80);
 }
 
 /* === MOOD PICKER (z obsługą edycji) === */
