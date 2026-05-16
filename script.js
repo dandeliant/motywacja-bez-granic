@@ -667,6 +667,63 @@ function renderActivities() {
 /* =============================================================
    DZIENNIK
    ============================================================= */
+/* === DZIENNIK — DOSTĘPNE JĘZYKI === */
+const JOURNAL_LANGS = [
+    { code: 'en', label: 'English',    flag: '🇬🇧', bcp: 'en-GB' },
+    { code: 'de', label: 'Deutsch',    flag: '🇩🇪', bcp: 'de-DE' },
+    { code: 'fr', label: 'Français',   flag: '🇫🇷', bcp: 'fr-FR' },
+    { code: 'ru', label: 'Русский',    flag: '🇷🇺', bcp: 'ru-RU' },
+    { code: 'es', label: 'Español',    flag: '🇪🇸', bcp: 'es-ES' }
+];
+
+// Wybiera najlepszy dostępny głos dla języka (preferuje Google → Microsoft Natural → cokolwiek)
+function pickBestJournalVoice(bcpCode) {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = speechSynthesis.getVoices();
+    const prefix = bcpCode.split('-')[0].toLowerCase();
+    const candidates = voices.filter(v => v.lang.toLowerCase().startsWith(prefix));
+    if (!candidates.length) return null;
+    const priorities = [
+        v => /google/i.test(v.name),
+        v => /natural|neural|online|wavenet/i.test(v.name),
+        v => v.lang.toLowerCase() === bcpCode.toLowerCase(),
+        v => true
+    ];
+    for (const p of priorities) {
+        const found = candidates.find(p);
+        if (found) return found;
+    }
+    return candidates[0];
+}
+
+// Wymawia tekst w danym języku
+let journalCurrentUtterance = null;
+function speakJournalText(text, bcpCode, badgeEl = null) {
+    if (!('speechSynthesis' in window)) {
+        toast('Brak TTS', 'Twoja przeglądarka nie obsługuje syntezy mowy', 'warning');
+        return;
+    }
+    try { speechSynthesis.cancel(); } catch (e) {}
+    // Usuń klasę 'speaking' z poprzednich
+    document.querySelectorAll('.lang-badge.speaking').forEach(b => b.classList.remove('speaking'));
+
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = bcpCode;
+    const v = pickBestJournalVoice(bcpCode);
+    if (v) u.voice = v;
+    u.rate = 0.95;
+    u.pitch = 1.0;
+    u.volume = 1.0;
+
+    if (badgeEl) {
+        badgeEl.classList.add('speaking');
+        u.onend = u.onerror = () => badgeEl.classList.remove('speaking');
+    }
+    journalCurrentUtterance = u;
+    speechSynthesis.speak(u);
+}
+
+/* === MOOD PICKER (z obsługą edycji) === */
 $$('.mood-btn').forEach(b => {
     b.addEventListener('click', () => {
         $$('.mood-btn').forEach(x => x.classList.remove('selected'));
@@ -675,32 +732,165 @@ $$('.mood-btn').forEach(b => {
     });
 });
 
+/* === PANEL JĘZYKÓW: cog + multilang checkbox === */
+function buildJournalLangFields() {
+    const list = $('#journalLangList');
+    list.innerHTML = JOURNAL_LANGS.map(l => `
+        <div class="lang-row">
+            <label class="lang-row-header">
+                <input type="checkbox" class="lang-toggle" data-lang="${l.code}">
+                <span class="lang-flag">${l.flag}</span>
+                <span>${l.label}</span>
+            </label>
+            <textarea class="lang-text hidden" data-lang="${l.code}"
+                      placeholder="${l.label} — tekst tutaj…" rows="3"></textarea>
+        </div>
+    `).join('');
+
+    // Toggle textarea per language
+    list.querySelectorAll('.lang-toggle').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const ta = list.querySelector(`.lang-text[data-lang="${cb.dataset.lang}"]`);
+            if (ta) ta.classList.toggle('hidden', !cb.checked);
+        });
+    });
+}
+
+$('#journalLangCog').addEventListener('click', () => {
+    const panel = $('#journalLangPanel');
+    const cog = $('#journalLangCog');
+    const isOpen = !panel.classList.contains('hidden');
+    panel.classList.toggle('hidden');
+    cog.classList.toggle('active', !isOpen);
+});
+
+$('#journalMultilingual').addEventListener('change', (e) => {
+    $('#journalLangList').classList.toggle('hidden', !e.target.checked);
+});
+
+/* === EDYCJA / RESET === */
+let editingJournalId = null;
+
+function startEditingJournal(id) {
+    const entry = state.journal.find(e => e.id === id);
+    if (!entry) return;
+    editingJournalId = id;
+
+    $('#journalInput').value = entry.content;
+    state.settings.currentMood = entry.mood || null;
+    $$('.mood-btn').forEach(b => {
+        b.classList.toggle('selected', entry.mood && Number(b.dataset.mood) === entry.mood);
+    });
+
+    // Wczytaj tłumaczenia (jeśli są)
+    const hasTrans = entry.translations && Object.keys(entry.translations).length > 0;
+    $('#journalMultilingual').checked = hasTrans;
+    $('#journalLangList').classList.toggle('hidden', !hasTrans);
+    if (hasTrans) {
+        $('#journalLangPanel').classList.remove('hidden');
+        $('#journalLangCog').classList.add('active');
+    }
+    document.querySelectorAll('#journalLangList .lang-toggle').forEach(cb => {
+        const text = entry.translations?.[cb.dataset.lang];
+        cb.checked = !!text;
+        const ta = $(`#journalLangList .lang-text[data-lang="${cb.dataset.lang}"]`);
+        if (ta) {
+            ta.value = text || '';
+            ta.classList.toggle('hidden', !text);
+        }
+    });
+
+    // UI mode
+    $('#journalFormTitle').textContent = '✏️ Edytuj wpis — ' + formatDate(entry.date.slice(0, 10));
+    $('#saveJournal').innerHTML = '💾 Zaktualizuj wpis';
+    $('#cancelEditJournal').classList.remove('hidden');
+
+    // Wizualnie zaznacz edytowany wpis
+    document.querySelectorAll('.journal-entry').forEach(el => el.classList.remove('editing'));
+    document.querySelector(`.journal-entry[data-id="${id}"]`)?.classList.add('editing');
+
+    // Scroll do formularza
+    document.querySelector('#view-journal .journal-form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function resetJournalForm() {
+    editingJournalId = null;
+    $('#journalInput').value = '';
+    $$('.mood-btn').forEach(b => b.classList.remove('selected'));
+    state.settings.currentMood = null;
+    $('#journalFormTitle').innerHTML = 'Nowy wpis — <span id="journalDateLabel"></span>';
+    $('#journalDateLabel').textContent = new Date().toLocaleDateString('pl-PL', {
+        weekday: 'long', day: 'numeric', month: 'long'
+    });
+    $('#saveJournal').innerHTML = '💾 Zapisz wpis (+10 XP)';
+    $('#cancelEditJournal').classList.add('hidden');
+
+    // Reset tłumaczeń
+    $('#journalMultilingual').checked = false;
+    $('#journalLangList').classList.add('hidden');
+    document.querySelectorAll('#journalLangList .lang-toggle').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#journalLangList .lang-text').forEach(ta => {
+        ta.value = '';
+        ta.classList.add('hidden');
+    });
+    document.querySelectorAll('.journal-entry').forEach(el => el.classList.remove('editing'));
+}
+
+$('#cancelEditJournal').addEventListener('click', resetJournalForm);
+
+/* === ZAPIS / AKTUALIZACJA WPISU === */
 $('#saveJournal').addEventListener('click', () => {
     const content = $('#journalInput').value.trim();
     if (!content) { toast('Napisz coś', '', 'warning'); return; }
 
-    state.journal.unshift({
-        id: uid(),
-        date: new Date().toISOString(),
-        content,
-        mood: state.settings.currentMood
-    });
-    saveState();
-    updateStreak();
-    addXP(10);
-    toast('📓 Wpis zapisany', '+10 XP za refleksję', 'success');
-    $('#journalInput').value = '';
-    $$('.mood-btn').forEach(x => x.classList.remove('selected'));
-    state.settings.currentMood = null;
+    // Zbierz tłumaczenia
+    const translations = {};
+    if ($('#journalMultilingual').checked) {
+        JOURNAL_LANGS.forEach(l => {
+            const cb = document.querySelector(`#journalLangList .lang-toggle[data-lang="${l.code}"]`);
+            const ta = document.querySelector(`#journalLangList .lang-text[data-lang="${l.code}"]`);
+            if (cb?.checked && ta?.value.trim()) translations[l.code] = ta.value.trim();
+        });
+    }
+    const hasTrans = Object.keys(translations).length > 0;
+
+    if (editingJournalId) {
+        // Aktualizacja istniejącego
+        const entry = state.journal.find(e => e.id === editingJournalId);
+        if (entry) {
+            entry.content = content;
+            entry.mood = state.settings.currentMood;
+            if (hasTrans) entry.translations = translations;
+            else delete entry.translations;
+            entry.editedAt = new Date().toISOString();
+        }
+        saveState();
+        toast('✅ Wpis zaktualizowany', '', 'success');
+    } else {
+        // Nowy wpis
+        const newEntry = {
+            id: uid(),
+            date: new Date().toISOString(),
+            content,
+            mood: state.settings.currentMood
+        };
+        if (hasTrans) newEntry.translations = translations;
+        state.journal.unshift(newEntry);
+        saveState();
+        updateStreak();
+        addXP(10);
+        toast('📓 Wpis zapisany', '+10 XP za refleksję', 'success');
+        updateChallengeProgress('journal');
+    }
+
+    resetJournalForm();
     renderJournal();
     renderDashboard();
-
-    // Aktualizuj wyzwania dziennika
-    updateChallengeProgress('journal');
 });
 
 $('#quickJournal').addEventListener('click', () => switchView('journal'));
 
+/* === RENDER LISTY === */
 function renderJournal() {
     $('#journalDateLabel').textContent = new Date().toLocaleDateString('pl-PL', {
         weekday: 'long', day: 'numeric', month: 'long'
@@ -708,17 +898,238 @@ function renderJournal() {
     const list = $('#journalList');
     if (state.journal.length === 0) {
         list.innerHTML = '<div class="empty-state">Brak wpisów. Zacznij dziś — pierwszy wpis to pierwszy krok.</div>';
+        updateBulkCounter();
         return;
     }
     const moods = { 1:'😫', 2:'😕', 3:'😐', 4:'🙂', 5:'🔥' };
-    list.innerHTML = state.journal.map(e => `
-        <div class="journal-entry">
-            ${e.mood ? `<span class="journal-mood">${moods[e.mood] || ''}</span>` : ''}
-            <div class="journal-date">${formatDateTime(e.date)}</div>
-            <div class="journal-content">${escapeHTML(e.content)}</div>
-        </div>
-    `).join('');
+
+    list.innerHTML = state.journal.map(e => {
+        const transBadges = e.translations ? Object.keys(e.translations).map(code => {
+            const l = JOURNAL_LANGS.find(x => x.code === code);
+            if (!l) return '';
+            return `<button class="lang-badge" data-listen="${e.id}" data-lang="${code}" title="Odsłuchaj po ${l.label}">${l.flag} ${l.code.toUpperCase()} 🔊</button>`;
+        }).join('') : '';
+
+        return `
+            <div class="journal-entry" data-id="${e.id}">
+                <div class="entry-header">
+                    <input type="checkbox" class="entry-select" data-id="${e.id}">
+                    <span class="journal-date">${formatDateTime(e.date)}</span>
+                    ${e.mood ? `<span class="journal-mood">${moods[e.mood] || ''}</span>` : ''}
+                    <div class="entry-actions">
+                        <button class="icon-btn" data-listen="${e.id}" data-lang="pl" title="Odsłuchaj po polsku">🔊</button>
+                        <button class="icon-btn" data-edit="${e.id}" title="Edytuj">✏️</button>
+                        <button class="icon-btn delete" data-delete="${e.id}" title="Usuń">🗑️</button>
+                    </div>
+                </div>
+                <div class="journal-content">${escapeHTML(e.content)}</div>
+                ${transBadges ? `<div class="lang-badges">🔊 Odsłuchaj w: ${transBadges}</div>` : ''}
+                ${e.editedAt ? `<div class="entry-edited">edytowano: ${formatDateTime(e.editedAt)}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    updateBulkCounter();
 }
+
+/* === DELEGOWANE EVENTY NA LIŚCIE === */
+$('#journalList').addEventListener('click', (e) => {
+    const target = e.target.closest('[data-edit], [data-delete], [data-listen]');
+    if (!target) {
+        // Klik w checkbox?
+        if (e.target.matches('.entry-select')) updateBulkCounter();
+        return;
+    }
+
+    if (target.dataset.edit) {
+        startEditingJournal(target.dataset.edit);
+    } else if (target.dataset.delete) {
+        const id = target.dataset.delete;
+        const entry = state.journal.find(x => x.id === id);
+        if (!entry) return;
+        if (confirm(`Usunąć wpis z ${formatDate(entry.date.slice(0,10))}?`)) {
+            state.journal = state.journal.filter(x => x.id !== id);
+            if (editingJournalId === id) resetJournalForm();
+            saveState();
+            renderJournal();
+            toast('🗑️ Wpis usunięty', '', '');
+        }
+    } else if (target.dataset.listen) {
+        const id = target.dataset.listen;
+        const lang = target.dataset.lang;
+        const entry = state.journal.find(x => x.id === id);
+        if (!entry) return;
+        let text, bcp;
+        if (lang === 'pl') { text = entry.content; bcp = 'pl-PL'; }
+        else {
+            text = entry.translations?.[lang];
+            const l = JOURNAL_LANGS.find(x => x.code === lang);
+            bcp = l?.bcp || 'en-GB';
+        }
+        if (text) speakJournalText(text, bcp, target);
+    }
+});
+
+$('#journalList').addEventListener('change', (e) => {
+    if (e.target.matches('.entry-select')) updateBulkCounter();
+});
+
+/* === BULK SELECT + EXPORT === */
+function updateBulkCounter() {
+    const total = document.querySelectorAll('.entry-select').length;
+    const checked = document.querySelectorAll('.entry-select:checked').length;
+    $('#bulkCounter').textContent = checked === 0 ? '0 zaznaczonych' : `${checked} z ${total} zaznaczonych`;
+    $('#selectAllJournal').checked = checked > 0 && checked === total;
+    document.querySelectorAll('.journal-entry').forEach(el => {
+        const cb = el.querySelector('.entry-select');
+        el.classList.toggle('selected', cb?.checked);
+    });
+}
+
+$('#selectAllJournal').addEventListener('change', (e) => {
+    const checked = e.target.checked;
+    document.querySelectorAll('.entry-select').forEach(cb => cb.checked = checked);
+    updateBulkCounter();
+});
+
+function getSelectedEntries() {
+    const ids = Array.from(document.querySelectorAll('.entry-select:checked')).map(el => el.dataset.id);
+    return state.journal.filter(e => ids.includes(e.id));
+}
+
+const MOOD_LABELS = { 1:'😫 ciężko', 2:'😕 nie najlepiej', 3:'😐 ok', 4:'🙂 dobrze', 5:'🔥 świetnie' };
+
+function entriesToText(entries) {
+    let out = `📓 DZIENNIK DZIAŁAŃ — Motywacja bez granic\n`;
+    out += `Eksport: ${new Date().toLocaleString('pl-PL')}\n`;
+    out += `Liczba wpisów: ${entries.length}\n`;
+    out += '═'.repeat(60) + '\n\n';
+
+    entries.forEach((e, i) => {
+        const d = new Date(e.date);
+        out += `▶ Wpis ${i + 1}: ${d.toLocaleString('pl-PL', { weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })}\n`;
+        if (e.mood) out += `   Nastrój: ${MOOD_LABELS[e.mood] || e.mood}\n`;
+        out += '\n' + e.content + '\n\n';
+        if (e.translations) {
+            Object.entries(e.translations).forEach(([code, txt]) => {
+                const l = JOURNAL_LANGS.find(x => x.code === code);
+                if (!l) return;
+                out += `--- ${l.flag} ${l.label} ---\n${txt}\n\n`;
+            });
+        }
+        if (e.editedAt) out += `(edytowano: ${new Date(e.editedAt).toLocaleString('pl-PL')})\n`;
+        out += '─'.repeat(60) + '\n\n';
+    });
+    return out;
+}
+
+function downloadFile(content, filename, mime = 'text/plain;charset=utf-8') {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+$('#exportSelectedJournal').addEventListener('click', () => {
+    const entries = getSelectedEntries();
+    if (entries.length === 0) {
+        toast('Nic nie zaznaczono', 'Zaznacz wpisy do eksportu', 'warning');
+        return;
+    }
+    downloadFile(entriesToText(entries), `dziennik-wybrane-${today()}.txt`);
+    toast('⬇️ Eksport gotowy', `${entries.length} wpisów`, 'success');
+});
+
+$('#exportAllJournalText').addEventListener('click', () => {
+    if (state.journal.length === 0) { toast('Brak wpisów', '', 'warning'); return; }
+    downloadFile(entriesToText(state.journal), `dziennik-wszystkie-${today()}.txt`);
+    toast('⬇️ Eksport gotowy', `${state.journal.length} wpisów`, 'success');
+});
+
+/* === EKSPORT DO DRUKU (HTML) === */
+function entriesToPrintableHTML(entries) {
+    const rows = entries.map((e, i) => {
+        const d = new Date(e.date);
+        let html = `<article class="entry">`;
+        html += `<header class="entry-h">
+            <span class="entry-no">#${i + 1}</span>
+            <h2>${d.toLocaleDateString('pl-PL', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</h2>
+            <span class="entry-time">${d.toLocaleTimeString('pl-PL', { hour:'2-digit', minute:'2-digit' })}</span>
+            ${e.mood ? `<span class="entry-mood">${MOOD_LABELS[e.mood] || ''}</span>` : ''}
+        </header>`;
+        html += `<div class="entry-body">${escapeHTML(e.content).replace(/\n/g, '<br>')}</div>`;
+        if (e.translations) {
+            Object.entries(e.translations).forEach(([code, txt]) => {
+                const l = JOURNAL_LANGS.find(x => x.code === code);
+                if (!l) return;
+                html += `<div class="entry-trans"><div class="trans-head">${l.flag} ${l.label}</div><div>${escapeHTML(txt).replace(/\n/g, '<br>')}</div></div>`;
+            });
+        }
+        if (e.editedAt) html += `<div class="entry-edited">edytowano: ${new Date(e.editedAt).toLocaleString('pl-PL')}</div>`;
+        html += `</article>`;
+        return html;
+    }).join('');
+
+    return `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Dziennik działań</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;1,400&display=swap');
+    * { box-sizing: border-box; }
+    body { font-family: 'Fraunces', Georgia, serif; max-width: 760px; margin: 40px auto; padding: 30px;
+        color: #1a1a1a; line-height: 1.65; background: #fafaf7; }
+    h1 { font-size: 32px; border-bottom: 3px solid #6366f1; padding-bottom: 12px; margin-bottom: 8px;
+        font-weight: 900; letter-spacing: -0.02em; }
+    .meta { color: #6b7280; font-size: 13px; margin-bottom: 36px; font-style: italic; }
+    .entry { page-break-inside: avoid; margin-bottom: 28px; padding: 22px 26px;
+        border-left: 4px solid #6366f1; background: white; border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .entry-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+        border-bottom: 1px dashed #e5e7eb; padding-bottom: 10px; margin-bottom: 14px; }
+    .entry-no { font-size: 12px; color: #6366f1; font-weight: 700; }
+    .entry-h h2 { font-size: 18px; margin: 0; font-weight: 600; flex: 1; }
+    .entry-time { font-size: 13px; color: #6b7280; font-family: monospace; }
+    .entry-mood { font-size: 16px; }
+    .entry-body { white-space: pre-wrap; font-size: 15px; }
+    .entry-trans { margin-top: 14px; padding: 12px 14px; background: #f3f4f6;
+        border-radius: 4px; border-left: 2px solid #8b5cf6; font-size: 14px; }
+    .trans-head { color: #6366f1; font-weight: 600; font-size: 12px;
+        text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .entry-edited { color: #9ca3af; font-size: 11px; margin-top: 8px; font-style: italic; text-align: right; }
+    .print-btn { position: fixed; top: 20px; right: 20px; padding: 12px 22px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;
+        border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+        box-shadow: 0 4px 12px rgba(99,102,241,0.4); font-weight: 600; }
+    .print-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(99,102,241,0.5); }
+    @media print {
+        body { background: white; max-width: none; margin: 0; padding: 20mm; }
+        .no-print { display: none !important; }
+        .entry { box-shadow: none; border: 1px solid #e5e7eb; }
+    }
+</style>
+</head><body>
+    <button class="print-btn no-print" onclick="window.print()">🖨️ Drukuj / Zapisz jako PDF</button>
+    <h1>📓 Dziennik działań</h1>
+    <div class="meta">Eksport: ${new Date().toLocaleString('pl-PL')} • ${entries.length} wpisów</div>
+    ${rows}
+</body></html>`;
+}
+
+$('#exportAllJournalPrint').addEventListener('click', () => {
+    if (state.journal.length === 0) { toast('Brak wpisów', '', 'warning'); return; }
+    const html = entriesToPrintableHTML(state.journal);
+    const win = window.open('', '_blank');
+    if (!win) {
+        // Pop-up zablokowany — fallback: pobierz plik HTML
+        downloadFile(html, `dziennik-${today()}.html`, 'text/html;charset=utf-8');
+        toast('Pop-up zablokowany', 'Pobrałem plik HTML — otwórz go ręcznie', 'warning');
+        return;
+    }
+    win.document.write(html);
+    win.document.close();
+    toast('🖨️ Gotowe', 'Kliknij „Drukuj" lub zapisz jako PDF', 'success');
+});
 
 /* =============================================================
    STATYSTYKI
@@ -1800,10 +2211,17 @@ function init() {
     renderPomodoroUI();
 
     seedDefaultHabits();
+    buildJournalLangFields();
     renderHeader();
     renderDashboard();
     renderTimerTaskSelect();
     checkAchievements();
+
+    // Wymuś załadowanie głosów TTS — niektóre przeglądarki ładują lazy
+    if ('speechSynthesis' in window) {
+        speechSynthesis.getVoices();
+        speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+    }
 
     // Po włączonych powiadomieniach — zaplanuj przypomnienia hydration
     if (state.settings.notifications) scheduleHydrationReminders();

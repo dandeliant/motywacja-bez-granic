@@ -262,8 +262,12 @@
     <section class="view" id="view-journal">
         <h2>📓 Dziennik działań</h2>
 
-        <div class="card">
-            <h3>Nowy wpis — <span id="journalDateLabel"></span></h3>
+        <div class="card journal-form-card">
+            <div class="form-card-header">
+                <h3 id="journalFormTitle">Nowy wpis — <span id="journalDateLabel"></span></h3>
+                <button class="cog-btn" id="journalLangCog" title="Ustawienia języków" aria-label="Ustawienia">⚙️</button>
+            </div>
+
             <div class="mood-picker">
                 <label>Nastrój:</label>
                 <button class="mood-btn" data-mood="1">😫</button>
@@ -272,8 +276,37 @@
                 <button class="mood-btn" data-mood="4">🙂</button>
                 <button class="mood-btn" data-mood="5">🔥</button>
             </div>
+
             <textarea id="journalInput" placeholder="Co dziś zrobiłeś? Co się udało? Co możesz poprawić jutro?" rows="6"></textarea>
-            <button class="primary-btn" id="saveJournal">💾 Zapisz wpis (+10 XP)</button>
+
+            <!-- Panel ustawień języków (toggled by cog) -->
+            <div class="lang-settings-panel hidden" id="journalLangPanel">
+                <label class="switch-row">
+                    <input type="checkbox" id="journalMultilingual">
+                    <span>🌍 Dodaj wpis w różnych językach</span>
+                </label>
+                <p class="hint">Po zapisaniu możesz odsłuchać wpis w wybranych językach głosami Google TTS.</p>
+                <div class="lang-list hidden" id="journalLangList"></div>
+            </div>
+
+            <div class="journal-form-actions">
+                <button class="primary-btn" id="saveJournal">💾 Zapisz wpis (+10 XP)</button>
+                <button class="secondary-btn hidden" id="cancelEditJournal">Anuluj edycję</button>
+            </div>
+        </div>
+
+        <!-- Pasek akcji zbiorczych -->
+        <div class="journal-bulk-bar" id="journalBulkBar">
+            <label class="bulk-select-all">
+                <input type="checkbox" id="selectAllJournal">
+                <span>Zaznacz wszystkie</span>
+                <span class="bulk-counter" id="bulkCounter">0 zaznaczonych</span>
+            </label>
+            <div class="bulk-actions">
+                <button class="secondary-btn" id="exportSelectedJournal">⬇️ Wybrane (TXT)</button>
+                <button class="secondary-btn" id="exportAllJournalText">📝 Wszystkie (TXT)</button>
+                <button class="secondary-btn" id="exportAllJournalPrint">🖨️ Do druku (HTML)</button>
+            </div>
         </div>
 
         <div id="journalList" class="journal-list"></div>
