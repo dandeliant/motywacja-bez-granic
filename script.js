@@ -247,10 +247,8 @@ function showLevelUp(lvl) {
    NAWIGACJA
    ============================================================= */
 function switchView(viewName) {
-    // Auto-stop odczytu dziennika gdy wychodzimy z zakładki Dziennik
-    if (viewName !== 'journal' && journalSpeakingActive) {
-        stopJournalSpeak();
-    }
+    // Odczyt dziennika kontynuuje się niezależnie od zmiany zakładki —
+    // użyj przycisku Stop na pływającym pasku jeśli chcesz przerwać.
 
     $$('.view').forEach(v => v.classList.remove('active'));
     $(`#view-${viewName}`).classList.add('active');
