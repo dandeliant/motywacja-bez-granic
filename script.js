@@ -309,41 +309,75 @@ document.addEventListener('keydown', (e) => {
    ZADANIA — CRUD
    ============================================================= */
 const taskModal = $('#taskModal');
+let editingTaskId = null;
 
-function openTaskModal() {
-    $('#taskTitle').value = '';
-    $('#taskDesc').value = '';
-    $('#taskStart').value = today();
-    $('#taskEnd').value = '';
-    $('#taskPoints').value = '25';
+function openTaskModal(task = null) {
+    const isEdit = !!task;
+    editingTaskId = isEdit ? task.id : null;
+
+    $('#taskTitle').value = task?.title || '';
+    $('#taskDesc').value = task?.description || '';
+    $('#taskStart').value = task?.startDate || today();
+    $('#taskEnd').value = task?.endDate || '';
+    $('#taskPoints').value = String(task?.points || 25);
+
+    // Tytuł modala + przycisk zapisu
+    taskModal.querySelector('h3').textContent = isEdit ? '✏️ Edytuj zadanie' : 'Nowe zadanie';
+    $('#saveTask').textContent = isEdit ? '💾 Zaktualizuj zadanie' : 'Zapisz zadanie';
+
     taskModal.classList.remove('hidden');
     setTimeout(() => $('#taskTitle').focus(), 100);
 }
 
-$('#openAddTask').addEventListener('click', openTaskModal);
-$('#quickAddTask').addEventListener('click', openTaskModal);
-$('#cancelTask').addEventListener('click', () => taskModal.classList.add('hidden'));
+function editTask(id) {
+    const t = state.tasks.find(x => x.id === id);
+    if (!t) return;
+    openTaskModal(t);
+}
+
+$('#openAddTask').addEventListener('click', () => openTaskModal());
+$('#quickAddTask').addEventListener('click', () => openTaskModal());
+$('#cancelTask').addEventListener('click', () => {
+    taskModal.classList.add('hidden');
+    editingTaskId = null;
+});
 
 $('#saveTask').addEventListener('click', () => {
     const title = $('#taskTitle').value.trim();
     if (!title) { toast('Podaj tytuł zadania', '', 'warning'); return; }
 
-    const task = {
-        id: uid(),
+    const data = {
         title,
         description: $('#taskDesc').value.trim(),
         startDate: $('#taskStart').value || today(),
         endDate: $('#taskEnd').value || null,
-        status: 'active',
-        points: Number($('#taskPoints').value),
-        completedAt: null,
-        createdAt: new Date().toISOString()
+        points: Number($('#taskPoints').value)
     };
 
-    state.tasks.unshift(task);
+    if (editingTaskId) {
+        // Edycja istniejącego — zachowaj id, status, completedAt, createdAt
+        const t = state.tasks.find(x => x.id === editingTaskId);
+        if (t) {
+            Object.assign(t, data);
+            t.editedAt = new Date().toISOString();
+        }
+        toast('✅ Zadanie zaktualizowane', title, 'success');
+    } else {
+        // Nowe zadanie
+        const task = {
+            id: uid(),
+            ...data,
+            status: 'active',
+            completedAt: null,
+            createdAt: new Date().toISOString()
+        };
+        state.tasks.unshift(task);
+        toast('Zadanie dodane', title, 'success');
+    }
+
     saveState();
     taskModal.classList.add('hidden');
-    toast('Zadanie dodane', title, 'success');
+    editingTaskId = null;
     renderTasks();
     renderDashboard();
     renderTimerTaskSelect();
@@ -423,7 +457,8 @@ function renderTasks() {
                     </div>
                 </div>
                 <div class="task-actions">
-                    <button class="icon-btn delete" onclick="deleteTask('${task.id}')">🗑️</button>
+                    <button class="icon-btn" onclick="editTask('${task.id}')" title="Edytuj">✏️</button>
+                    <button class="icon-btn delete" onclick="deleteTask('${task.id}')" title="Usuń">🗑️</button>
                 </div>
             </div>
         `;
@@ -2566,6 +2601,7 @@ function scheduleHydrationReminders() {
 window.toggleHabitDay = toggleHabitDay;
 window.deleteHabit = deleteHabit;
 window.editHabit = editHabit;
+window.editTask = editTask;
 window.toggleHabitHistory = toggleHabitHistory;
 window.toggleHydrationSlot = toggleHydrationSlot;
 window.showDayDetail = showDayDetail;

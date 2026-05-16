@@ -3,7 +3,7 @@
    Strategia: cache-first dla app shell, network-first dla CDN
    ============================================================= */
 
-const CACHE_NAME = 'mbg-cache-v10';
+const CACHE_NAME = 'mbg-cache-v11';
 
 // Podstawowe pliki aplikacji (app shell)
 const APP_SHELL = [
