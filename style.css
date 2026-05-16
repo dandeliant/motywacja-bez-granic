@@ -620,6 +620,55 @@ h4 { font-size: 14px; color: var(--text-dim); margin: 16px 0 8px; text-transform
 
 .activities-list { display: flex; flex-direction: column; gap: 8px; max-height: 500px; overflow-y: auto; }
 
+/* === KARTA „Dzisiaj zsumowane" === */
+.day-summary-card {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.04));
+    border-color: var(--accent);
+}
+
+.day-summary-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.day-stat {
+    text-align: center;
+    padding: 16px 10px;
+    background: var(--bg-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+}
+.day-stat:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+.day-stat-num {
+    display: block;
+    font-size: 24px;
+    font-weight: 800;
+    background: var(--grad-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.day-stat-lbl {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 6px;
+}
+
+@media (max-width: 600px) {
+    .day-summary-stats { grid-template-columns: repeat(2, 1fr); }
+    .day-stat-num { font-size: 20px; }
+}
+
 .activity-item {
     background: var(--bg-2);
     padding: 12px 16px;
@@ -1421,29 +1470,133 @@ canvas { max-height: 280px; }
 
 .habits-list { display: flex; flex-direction: column; gap: 12px; }
 
-/* Pojedynczy nawyk — grid 30-dniowy */
+/* === BANNER POMOCY === */
+.help-banner {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.06));
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 16px 44px 16px 18px;
+    margin-bottom: 16px;
+    position: relative;
+    animation: fadeIn 0.3s;
+}
+.help-banner h4 {
+    color: var(--accent);
+    margin-bottom: 8px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 15px;
+}
+.help-banner p { font-size: 13px; line-height: 1.5; margin-bottom: 6px; color: var(--text); }
+.help-banner p:last-child { margin-bottom: 0; }
+.help-banner.dismissed { display: none; }
+.help-banner-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+.help-banner-close:hover { background: var(--bg-3); color: var(--text); }
+
+/* === HABIT ROW v2 — wielki przycisk DZIŚ + zwijana historia === */
 .habit-row {
     background: var(--bg-2);
-    border-radius: var(--radius-sm);
-    padding: 12px 14px;
+    border-radius: var(--radius);
+    padding: 14px 16px;
     display: grid;
-    grid-template-columns: 42px 1fr auto;
+    grid-template-columns: 50px 1fr auto auto;
     align-items: center;
-    gap: 12px;
-    border-left: 3px solid var(--accent);
+    gap: 14px;
+    border-left: 4px solid var(--border);
+    transition: all 0.2s;
 }
 
-.habit-icon { font-size: 26px; text-align: center; }
+.habit-row.done-today {
+    border-left-color: var(--success);
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.05), var(--bg-2));
+}
 
-.habit-info { min-width: 0; }
-.habit-name { font-weight: 600; font-size: 15px; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; }
+.habit-icon {
+    font-size: 32px;
+    text-align: center;
+    background: var(--bg-3);
+    width: 50px;
+    height: 50px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.habit-row.done-today .habit-icon {
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.habit-main { min-width: 0; }
+.habit-name {
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.habit-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.habit-streak {
+    font-weight: 700;
+    color: var(--warning);
+    font-size: 14px;
+    white-space: nowrap;
+}
+.habit-streak small {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-size: 11px;
+    margin-left: 2px;
+}
+
+.habit-history-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+.habit-history-btn:hover { color: var(--text); border-color: var(--accent); }
+.habit-history-btn.expanded {
+    background: var(--bg-3);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.habit-history { margin-top: 12px; animation: fadeIn 0.25s; }
+.habit-history.hidden { display: none; }
 
 .habit-dots {
     display: grid;
-    grid-template-columns: repeat(14, 1fr);
     gap: 3px;
-    max-width: 100%;
 }
+.habit-dots.cols-7  { grid-template-columns: repeat(7, 1fr); }
+.habit-dots.cols-14 { grid-template-columns: repeat(14, 1fr); }
+.habit-dots.cols-15 { grid-template-columns: repeat(15, 1fr); }
+.habit-dots.cols-20 { grid-template-columns: repeat(20, 1fr); }
 
 .habit-dot {
     width: 100%;
@@ -1452,38 +1605,84 @@ canvas { max-height: 280px; }
     border-radius: 3px;
     cursor: pointer;
     transition: all 0.15s;
-    position: relative;
+    min-height: 14px;
 }
-
 .habit-dot:hover { transform: scale(1.2); outline: 1px solid var(--accent); }
 .habit-dot.done { background: var(--success); box-shadow: 0 0 6px rgba(16, 185, 129, 0.4); }
 .habit-dot.today { outline: 2px solid var(--accent); }
 
-.habit-stats {
-    text-align: right;
-    min-width: 80px;
-}
-
-.habit-streak {
-    font-weight: 700;
-    color: var(--warning);
-    font-size: 16px;
-}
-
-.habit-streak small { color: var(--text-dim); font-weight: 400; font-size: 11px; margin-left: 2px; }
-
-.habit-delete {
-    background: transparent;
-    border: none;
+.habit-history-hint {
+    margin-top: 8px;
+    font-size: 11px;
     color: var(--text-dim);
-    cursor: pointer;
-    font-size: 16px;
-    padding: 4px;
-    margin-top: 4px;
-    transition: color 0.2s;
+    font-style: italic;
 }
 
-.habit-delete:hover { color: var(--danger); }
+/* === Wielki przycisk „Zaznacz dziś" === */
+.habit-today-btn {
+    background: var(--bg-1);
+    border: 2px solid var(--border);
+    color: var(--text);
+    width: 100px;
+    height: 64px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font-size: 22px;
+    transition: all 0.25s;
+    flex-shrink: 0;
+    font-family: inherit;
+    padding: 4px 6px;
+}
+.habit-today-btn small {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    font-weight: 600;
+}
+.habit-today-btn:hover {
+    border-color: var(--success);
+    background: var(--bg-2);
+    transform: translateY(-2px);
+}
+.habit-today-btn:hover small { color: var(--text); }
+.habit-today-btn.done {
+    background: var(--grad-success);
+    border-color: var(--success);
+    color: white;
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+.habit-today-btn.done small { color: rgba(255, 255, 255, 0.95); }
+
+.habit-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.habit-actions .icon-btn { width: 32px; height: 32px; font-size: 14px; }
+
+/* Mobile — wszystkie elementy w pionie */
+@media (max-width: 700px) {
+    .habit-row {
+        grid-template-columns: 42px 1fr;
+        grid-template-areas:
+            "icon main"
+            "today today"
+            "actions actions";
+        gap: 10px;
+    }
+    .habit-icon { grid-area: icon; font-size: 24px; width: 42px; height: 42px; }
+    .habit-main { grid-area: main; }
+    .habit-today-btn { grid-area: today; width: 100%; height: 50px; flex-direction: row; gap: 8px; }
+    .habit-today-btn small { font-size: 12px; }
+    .habit-actions { grid-area: actions; flex-direction: row; justify-content: flex-end; }
+}
 
 /* ===== HYDRATION ===== */
 .hydration-hero {

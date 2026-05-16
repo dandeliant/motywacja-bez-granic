@@ -252,6 +252,29 @@
             <p class="timer-hint" id="timerHint">Kliknij START, aby rozpocząć sesję. Czas i data zapiszą się automatycznie.</p>
         </div>
 
+        <!-- Zbiorczy czas pracy w bieżącym dniu -->
+        <div class="card day-summary-card">
+            <h3>📊 Dzisiaj zsumowane</h3>
+            <div class="day-summary-stats">
+                <div class="day-stat">
+                    <span class="day-stat-num" id="todayTotalTime">0 min</span>
+                    <span class="day-stat-lbl">łączny czas</span>
+                </div>
+                <div class="day-stat">
+                    <span class="day-stat-num" id="todaySessionCount">0</span>
+                    <span class="day-stat-lbl">sesji</span>
+                </div>
+                <div class="day-stat">
+                    <span class="day-stat-num" id="todayAvgSession">—</span>
+                    <span class="day-stat-lbl">średnia sesja</span>
+                </div>
+                <div class="day-stat">
+                    <span class="day-stat-num" id="todayLongestSession">—</span>
+                    <span class="day-stat-lbl">najdłuższa</span>
+                </div>
+            </div>
+        </div>
+
         <div class="card">
             <h3>Historia sesji</h3>
             <div id="activitiesList" class="activities-list"></div>
@@ -566,6 +589,23 @@
             <button class="primary-btn" id="openAddHabit">➕ Nowy nawyk</button>
         </div>
 
+        <!-- Banner pomocniczy — jak działają nawyki -->
+        <div class="help-banner" id="habitsHelpBanner">
+            <button class="help-banner-close" id="dismissHabitsHelp" aria-label="Zamknij">✕</button>
+            <h4>💡 Jak to działa?</h4>
+            <p>
+                <strong>Najprościej:</strong> kliknij wielki przycisk <strong>„✓ Zaznacz dziś"</strong> przy nawyku, który wykonałeś dziś.
+                Klikniesz ponownie — cofniesz.
+            </p>
+            <p>
+                <strong>Historia:</strong> kliknij <strong>„📊 Historia"</strong> przy nawyku, żeby zobaczyć ostatnie dni jako kwadraciki.
+                Zielony = zrobione, ciemny = nie zrobione. Możesz cofnąć/zaznaczyć dowolny dzień klikając w kwadracik.
+            </p>
+            <p>
+                <strong>Edycja:</strong> ikonka ✏️ przy każdym nawyku — zmienisz nazwę, ikonę, porę dnia, liczbę dni w historii (7/14/30/60).
+            </p>
+        </div>
+
         <div class="habit-tabs">
             <button class="tab-btn active" data-tab="daily">☀️ Codzienne</button>
             <button class="tab-btn" data-tab="hydration">💧 Hydracja</button>
@@ -790,6 +830,14 @@
         <select id="habitType">
             <option value="daily" selected>Codzienny</option>
             <option value="monthly">Miesięczny</option>
+        </select>
+
+        <label>Liczba dni w historii (kwadracików)</label>
+        <select id="habitHistoryDays">
+            <option value="7">7 dni (tydzień)</option>
+            <option value="14" selected>14 dni (2 tygodnie)</option>
+            <option value="30">30 dni (miesiąc)</option>
+            <option value="60">60 dni (2 miesiące)</option>
         </select>
 
         <div class="modal-actions">

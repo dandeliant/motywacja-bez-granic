@@ -648,6 +648,8 @@ $('#pomodoroStop')?.addEventListener('click', () => {
 $('#pomodoroPill')?.addEventListener('click', () => switchView('dashboard'));
 
 function renderActivities() {
+    renderTimerDaySummary();
+
     const list = $('#activitiesList');
     if (state.activities.length === 0) {
         list.innerHTML = '<div class="empty-state">Jeszcze żadnej sesji. Kliknij START powyżej.</div>';
@@ -663,6 +665,49 @@ function renderActivities() {
         </div>
     `).join('');
 }
+
+/* === ZBIORCZY CZAS DZISIEJSZY (nad historią sesji) === */
+function formatHumanTime(seconds) {
+    if (!seconds || seconds === 0) return '0 min';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m} min`;
+}
+
+function renderTimerDaySummary() {
+    const t = today();
+    const todayActs = state.activities.filter(a => a.start.slice(0, 10) === t);
+    const totalSec = todayActs.reduce((s, a) => s + a.duration, 0);
+    const count = todayActs.length;
+    const avg = count > 0 ? Math.floor(totalSec / count) : 0;
+    const longest = count > 0 ? Math.max(...todayActs.map(a => a.duration)) : 0;
+
+    const elTotal = $('#todayTotalTime');
+    const elCount = $('#todaySessionCount');
+    const elAvg = $('#todayAvgSession');
+    const elLong = $('#todayLongestSession');
+
+    if (elTotal) elTotal.textContent = formatHumanTime(totalSec);
+    if (elCount) elCount.textContent = count;
+    if (elAvg)   elAvg.textContent = count > 0 ? formatHumanTime(avg) : '—';
+    if (elLong)  elLong.textContent = count > 0 ? formatHumanTime(longest) : '—';
+}
+
+/* === BANNER POMOCY (zwijany na stałe) === */
+(function initHabitsHelpBanner() {
+    const banner = $('#habitsHelpBanner');
+    const closeBtn = $('#dismissHabitsHelp');
+    if (!banner || !closeBtn) return;
+    if (localStorage.getItem('mbg_habits_help_dismissed') === '1') {
+        banner.classList.add('dismissed');
+    }
+    closeBtn.addEventListener('click', () => {
+        banner.classList.add('dismissed');
+        localStorage.setItem('mbg_habits_help_dismissed', '1');
+    });
+})();
 
 /* =============================================================
    DZIENNIK
@@ -1667,53 +1712,100 @@ function renderHabits() {
 }
 
 function renderHabitRow(h) {
-    const days = 14;
-    const doneSet = new Set(h.doneDates);
     const t = today();
+    const doneSet = new Set(h.doneDates);
+    const doneToday = doneSet.has(t);
+    const days = h.historyDays || 14;
+    const streak = habitStreak(h);
+
+    // Generuj kropki historii
     let dots = '';
     for (let i = days - 1; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const iso = d.toISOString().slice(0, 10);
         const isToday = iso === t;
-        dots += `<div class="habit-dot ${doneSet.has(iso) ? 'done' : ''} ${isToday ? 'today' : ''}"
-                      title="${iso}" onclick="toggleHabitDay('${h.id}', '${iso}')"></div>`;
+        const done = doneSet.has(iso);
+        const dateLabel = d.toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' });
+        dots += `<div class="habit-dot ${done ? 'done' : ''} ${isToday ? 'today' : ''}"
+                      title="${dateLabel}${done ? ' — zrobione (klik = cofnij)' : ' (klik = zaznacz)'}"
+                      onclick="toggleHabitDay('${h.id}', '${iso}')"></div>`;
     }
-    const streak = habitStreak(h);
+
+    // Klasa CSS dla siatki — dopasuj do liczby dni
+    const colsClass = days <= 7 ? 'cols-7' : days <= 14 ? 'cols-14' : days <= 30 ? 'cols-15' : 'cols-20';
+
     return `
-        <div class="habit-row">
+        <div class="habit-row ${doneToday ? 'done-today' : ''}">
             <div class="habit-icon">${h.icon}</div>
-            <div class="habit-info">
+            <div class="habit-main">
                 <div class="habit-name">${escapeHTML(h.name)}</div>
-                <div class="habit-dots">${dots}</div>
+                <div class="habit-meta">
+                    <span class="habit-streak">🔥 ${streak}<small>dni z rzędu</small></span>
+                    <button class="habit-history-btn" onclick="toggleHabitHistory('${h.id}', this)">
+                        📊 Historia ${days} dni ▾
+                    </button>
+                </div>
+                <div class="habit-history hidden" id="hist-${h.id}">
+                    <div class="habit-dots ${colsClass}">${dots}</div>
+                    <p class="habit-history-hint">Każdy kwadracik = jeden dzień. Klik = zmień status dla tego dnia. Zielony = zrobione.</p>
+                </div>
             </div>
-            <div class="habit-stats">
-                <div class="habit-streak">🔥 ${streak}<small>dni</small></div>
-                <button class="habit-delete" onclick="deleteHabit('${h.id}')">🗑️</button>
+            <button class="habit-today-btn ${doneToday ? 'done' : ''}" onclick="toggleHabitDay('${h.id}', '${t}')">
+                ${doneToday ? '✅' : '✓'}
+                <small>${doneToday ? 'Zrobione' : 'Zaznacz dziś'}</small>
+            </button>
+            <div class="habit-actions">
+                <button class="icon-btn" onclick="editHabit('${h.id}')" title="Edytuj">✏️</button>
+                <button class="icon-btn delete" onclick="deleteHabit('${h.id}')" title="Usuń">🗑️</button>
             </div>
         </div>
     `;
 }
 
+function toggleHabitHistory(id, btn) {
+    const el = document.getElementById('hist-' + id);
+    if (!el) return;
+    const isHidden = el.classList.toggle('hidden');
+    btn.classList.toggle('expanded', !isHidden);
+    btn.innerHTML = btn.innerHTML.replace(/▾|▴/, isHidden ? '▾' : '▴');
+}
+
 function deleteHabit(id) {
-    if (!confirm('Usunąć ten nawyk?')) return;
-    state.habits = state.habits.filter(h => h.id !== id);
+    const h = state.habits.find(x => x.id === id);
+    if (!h) return;
+    if (!confirm(`Usunąć nawyk „${h.name}"?\nHistoria wykonań zostanie utracona.`)) return;
+    state.habits = state.habits.filter(x => x.id !== id);
     saveState();
     renderHabits();
+    toast('🗑️ Nawyk usunięty', h.name, '');
+}
+
+function editHabit(id) {
+    const h = state.habits.find(x => x.id === id);
+    if (!h) return;
+    openHabitModal(h);
 }
 
 /* === MODAL NAWYKU === */
 const HABIT_ICONS = ['✨','💪','🧠','🧘','📚','🏃','💧','🥗','😴','🪥','🧘‍♂️','☕','🎯','💻','✍️','📿','🎨','🎵','🌱','🧹','💊','🚴','🏋️','🌅','🌙','💡','⚡','🔥','❤️','🙏'];
 
-function openHabitModal() {
-    $('#habitName').value = '';
-    $('#habitIcon').value = '✨';
-    $('#habitGroup').value = 'day';
-    $('#habitType').value = 'daily';
+let editingHabitId = null;
+
+function openHabitModal(habit = null) {
+    const isEdit = !!habit;
+    editingHabitId = isEdit ? habit.id : null;
+
+    const selectedIcon = habit?.icon || '✨';
+    $('#habitName').value = habit?.name || '';
+    $('#habitIcon').value = selectedIcon;
+    $('#habitGroup').value = habit?.group || 'day';
+    $('#habitType').value = habit?.type || 'daily';
+    $('#habitHistoryDays').value = String(habit?.historyDays || 14);
 
     const grid = $('#habitIconGrid');
     grid.innerHTML = HABIT_ICONS.map(i =>
-        `<button class="icon-pick ${i === '✨' ? 'selected' : ''}" data-icon="${i}">${i}</button>`
+        `<button class="icon-pick ${i === selectedIcon ? 'selected' : ''}" data-icon="${i}">${i}</button>`
     ).join('');
     grid.querySelectorAll('.icon-pick').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -1724,30 +1816,48 @@ function openHabitModal() {
         });
     });
 
-    $('#habitModal').classList.remove('hidden');
+    // Aktualizuj tytuł i przycisk zapisu
+    const modal = $('#habitModal');
+    modal.querySelector('h3').textContent = isEdit ? '✏️ Edytuj nawyk' : 'Nowy nawyk';
+    $('#saveHabit').textContent = isEdit ? '💾 Zaktualizuj' : 'Zapisz nawyk';
+
+    modal.classList.remove('hidden');
 }
 
-$('#openAddHabit')?.addEventListener('click', openHabitModal);
+$('#openAddHabit')?.addEventListener('click', () => openHabitModal());
 $('#addMonthlyHabit')?.addEventListener('click', () => {
     openHabitModal();
     $('#habitType').value = 'monthly';
 });
-$('#cancelHabit')?.addEventListener('click', () => $('#habitModal').classList.add('hidden'));
+$('#cancelHabit')?.addEventListener('click', () => {
+    $('#habitModal').classList.add('hidden');
+    editingHabitId = null;
+});
 
 $('#saveHabit')?.addEventListener('click', () => {
     const name = $('#habitName').value.trim();
     if (!name) { toast('Podaj nazwę', '', 'warning'); return; }
-    state.habits.push({
-        id: uid(),
+
+    const data = {
         name,
         icon: $('#habitIcon').value,
         group: $('#habitGroup').value,
         type: $('#habitType').value,
-        doneDates: []
-    });
+        historyDays: Number($('#habitHistoryDays').value) || 14
+    };
+
+    if (editingHabitId) {
+        const h = state.habits.find(x => x.id === editingHabitId);
+        if (h) Object.assign(h, data); // zachowaj doneDates i id
+        toast('✅ Nawyk zaktualizowany', name, 'success');
+    } else {
+        state.habits.push({ id: uid(), ...data, doneDates: [] });
+        toast('✅ Nawyk dodany', name, 'success');
+    }
+
     saveState();
     $('#habitModal').classList.add('hidden');
-    toast('✅ Nawyk dodany', name, 'success');
+    editingHabitId = null;
     renderHabits();
 });
 
@@ -2186,6 +2296,8 @@ function scheduleHydrationReminders() {
 // Wystaw globalnie dla inline onclick
 window.toggleHabitDay = toggleHabitDay;
 window.deleteHabit = deleteHabit;
+window.editHabit = editHabit;
+window.toggleHabitHistory = toggleHabitHistory;
 window.toggleHydrationSlot = toggleHydrationSlot;
 window.showDayDetail = showDayDetail;
 
