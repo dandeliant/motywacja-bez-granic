@@ -2196,6 +2196,542 @@ canvas { max-height: 280px; }
 .icon-pick.selected { border-color: var(--accent); background: var(--bg-3); transform: scale(1.1); }
 
 /* =========================================================
+   START DNIA — guided morning flow + karta MIT
+   ========================================================= */
+
+/* === Karta przypomnienia o Start dnia (na dashboardzie) === */
+.morning-prompt {
+    background: linear-gradient(135deg,
+        rgba(251, 191, 36, 0.12),
+        rgba(236, 72, 153, 0.08),
+        rgba(99, 102, 241, 0.08));
+    border-color: var(--gold);
+    box-shadow: 0 0 32px rgba(251, 191, 36, 0.15);
+    animation: pulseGlow 3s infinite;
+}
+.morning-prompt-content {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 16px;
+}
+.morning-prompt .prompt-icon {
+    font-size: 42px;
+    line-height: 1;
+}
+.morning-prompt strong { display: block; font-size: 16px; margin-bottom: 4px; }
+.morning-prompt small { color: var(--text-dim); font-size: 13px; }
+@media (max-width: 600px) {
+    .morning-prompt-content { grid-template-columns: 1fr; text-align: center; }
+    .morning-prompt-content button { width: 100%; }
+}
+
+/* === Karta MIT (na dashboardzie po wybraniu) === */
+.mit-card {
+    background: linear-gradient(135deg,
+        rgba(251, 191, 36, 0.15),
+        rgba(245, 158, 11, 0.08));
+    border: 1px solid var(--gold);
+    box-shadow: 0 0 36px rgba(251, 191, 36, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+.mit-card::before {
+    content: '';
+    position: absolute;
+    top: -50%; right: -10%;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(251, 191, 36, 0.15), transparent 70%);
+    pointer-events: none;
+}
+.mit-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    position: relative;
+}
+.mit-crown {
+    font-size: 24px;
+    filter: drop-shadow(0 0 8px var(--gold));
+}
+.mit-label {
+    font-size: 11px;
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 700;
+    flex: 1;
+}
+.mit-clear {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+.mit-clear:hover { color: var(--danger); }
+
+.mit-task {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text);
+    margin-bottom: 16px;
+    position: relative;
+}
+.mit-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    position: relative;
+}
+.mit-actions button { width: auto; flex: 1; min-width: 180px; margin: 0; }
+
+.mit-card.done {
+    background: linear-gradient(135deg,
+        rgba(16, 185, 129, 0.15),
+        rgba(5, 150, 105, 0.08));
+    border-color: var(--success);
+}
+.mit-card.done .mit-task { text-decoration: line-through; opacity: 0.7; }
+.mit-card.done .mit-actions button:nth-child(2) { display: none; }
+
+/* =========================================================
+   MORNING FLOW — pełnoekranowy guided overlay
+   ========================================================= */
+.morning-flow {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    overflow-y: auto;
+    background: linear-gradient(180deg,
+        #1e1b4b 0%,
+        #4c1d95 25%,
+        #831843 50%,
+        #c2410c 80%,
+        #fbbf24 100%);
+    animation: fadeIn 0.5s ease-out;
+}
+.morning-flow.hidden { display: none; }
+
+.morning-flow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse at 80% 20%, rgba(251, 191, 36, 0.3), transparent 50%),
+        radial-gradient(ellipse at 20% 90%, rgba(236, 72, 153, 0.25), transparent 50%);
+    pointer-events: none;
+}
+
+.morning-skip {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 13px;
+    z-index: 10;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+.morning-skip:hover { background: rgba(255, 255, 255, 0.2); }
+
+.morning-container {
+    position: relative;
+    z-index: 2;
+    max-width: 580px;
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 48px 24px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    color: white;
+    text-align: center;
+}
+
+.morning-progress {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 40px;
+}
+.morning-dot {
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 2px;
+    transition: all 0.3s;
+}
+.morning-dot.active {
+    background: white;
+    width: 48px;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+}
+.morning-dot.done {
+    background: var(--gold);
+}
+
+.morning-step {
+    display: none;
+    animation: fadeInUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.morning-step.active {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.morning-greeting {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 28px;
+    font-weight: 500;
+    font-style: italic;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 12px;
+}
+
+.morning-emoji {
+    font-size: 64px;
+    margin-bottom: 12px;
+    line-height: 1;
+    filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.3));
+    animation: floatY 3s ease-in-out infinite;
+}
+@keyframes floatY {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+}
+
+.morning-step h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: clamp(28px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 10px;
+    color: white;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+.morning-sub {
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-bottom: 28px;
+    line-height: 1.5;
+    max-width: 36ch;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* === Mood picker === */
+.morning-mood-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+}
+.morning-mood-btn {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    padding: 14px 6px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+.morning-mood-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: white;
+    transform: translateY(-3px);
+}
+.morning-mood-btn.selected {
+    background: white;
+    color: var(--ink);
+    border-color: white;
+    transform: scale(1.1);
+    box-shadow: 0 8px 24px rgba(255, 255, 255, 0.3);
+}
+.morning-mood-btn span { font-size: 28px; line-height: 1; }
+.morning-mood-btn small {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.85;
+}
+
+/* === MIT list === */
+.morning-mit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+.morning-mit-task {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    padding: 14px 18px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    text-align: left;
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 0.2s;
+    font-family: inherit;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+.morning-mit-task:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: white;
+    transform: translateX(3px);
+}
+.morning-mit-task .task-xp-pill {
+    font-size: 11px;
+    background: rgba(251, 191, 36, 0.3);
+    padding: 3px 9px;
+    border-radius: 999px;
+    color: #fef3c7;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.morning-mit-empty {
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+    padding: 10px;
+    font-size: 13px;
+}
+.morning-mit-other {
+    background: transparent;
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.9);
+    padding: 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    width: 100%;
+    font-size: 14px;
+    font-family: inherit;
+    transition: all 0.2s;
+    margin-top: 8px;
+}
+.morning-mit-other:hover { background: rgba(255, 255, 255, 0.1); border-color: white; }
+
+.morning-mit-new { margin-top: 12px; }
+.morning-mit-new input {
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--ink);
+    border: none;
+    padding: 14px;
+    border-radius: var(--radius);
+    font-size: 15px;
+    width: 100%;
+    margin-bottom: 10px;
+}
+.morning-mit-new input::placeholder { color: rgba(0, 0, 0, 0.4); }
+.morning-mit-points {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 13px;
+}
+.morning-mit-points select {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--ink);
+    margin: 0;
+}
+
+/* === Water === */
+.morning-water-btn {
+    background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+    border: none;
+    color: white;
+    padding: 28px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: inherit;
+    width: 100%;
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 10px 30px rgba(14, 165, 233, 0.4);
+}
+.morning-water-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 40px rgba(14, 165, 233, 0.6);
+}
+.morning-water-btn.done {
+    background: linear-gradient(135deg, #10b981, #059669);
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
+}
+.morning-water-btn .water-glow {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 60px; height: 60px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.4), transparent 70%);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: ripple 2.4s ease-out infinite;
+}
+@keyframes ripple {
+    0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
+    100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+}
+.morning-water-btn .water-text {
+    font-size: 22px;
+    font-weight: 700;
+    position: relative;
+}
+.morning-water-btn small {
+    font-size: 13px;
+    opacity: 0.9;
+    position: relative;
+}
+
+/* === Focus session === */
+.morning-focus-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.morning-focus-btn {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    padding: 20px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+.morning-focus-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: white;
+    transform: translateY(-3px);
+}
+.morning-focus-btn.primary {
+    background: white;
+    color: var(--ink);
+    border-color: white;
+    transform: scale(1.05);
+    box-shadow: 0 10px 30px rgba(255, 255, 255, 0.3);
+}
+.morning-focus-btn.primary:hover { transform: scale(1.05) translateY(-3px); }
+.morning-focus-btn strong {
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+.morning-focus-btn small {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.8;
+}
+.morning-focus-btn .focus-tag {
+    font-size: 10px;
+    font-style: italic;
+    opacity: 0.7;
+    margin-top: 2px;
+}
+
+/* === Completion === */
+.morning-complete {
+    text-align: center;
+    padding: 20px 0;
+}
+.complete-sun {
+    font-size: 100px;
+    line-height: 1;
+    margin-bottom: 16px;
+    filter: drop-shadow(0 0 40px rgba(251, 191, 36, 0.8));
+    animation: floatY 3s ease-in-out infinite;
+}
+.morning-summary {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin: 20px auto;
+    text-align: left;
+    max-width: 420px;
+    font-size: 14px;
+    line-height: 1.7;
+}
+.morning-summary .sum-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.morning-summary .sum-icon { font-size: 18px; flex-shrink: 0; }
+
+/* === Call-to-action button === */
+.morning-cta, .morning-start-btn {
+    background: white;
+    color: var(--ink);
+    border: none;
+    padding: 16px 32px;
+    border-radius: var(--radius);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.2s;
+    font-family: inherit;
+    box-shadow: 0 10px 30px rgba(255, 255, 255, 0.25);
+}
+.morning-cta:hover, .morning-start-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 36px rgba(255, 255, 255, 0.4);
+}
+
+@media (max-width: 480px) {
+    .morning-mood-btn span { font-size: 24px; }
+    .morning-mood-btn small { font-size: 9px; }
+    .morning-focus-btn strong { font-size: 28px; }
+    .complete-sun { font-size: 80px; }
+    .morning-container { padding: 40px 16px 24px; }
+}
+
+/* =========================================================
    POMODORO — bohater dashboardu (zero opór)
    ========================================================= */
 .pomodoro-card { position: relative; overflow: hidden; }

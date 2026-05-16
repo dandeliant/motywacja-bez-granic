@@ -31,8 +31,14 @@ const DEFAULT_STATE = {
         dailyGoal: 3,
         notifications: false,
         currentMood: null,
-        calendarCursor: null       // ISO — aktualnie wyświetlany miesiąc w kalendarzu
+        calendarCursor: null,      // ISO — aktualnie wyświetlany miesiąc w kalendarzu
+        morningFlowEnabled: true,  // auto-pokaż Start dnia rano
+        morningFlowLastShown: null // ISO — ostatni dzień wyświetlenia (lub pominięcia)
     },
+
+    // Per-day snapshots — MIT, poranny mood
+    dailyMIT: {},        // { isoDate: taskId }
+    morningMoods: {},    // { isoDate: 1-5 }
     timer: {
         running: false,
         startedAt: null,
@@ -1794,6 +1800,9 @@ function renderDashboard() {
 
     // Pomodoro UI (aktywne odliczanie vs przyciski)
     renderPomodoroUI();
+
+    // Karta MIT (Most Important Task) z Start dnia
+    renderMITCard();
 }
 
 /* =============================================================
@@ -2748,12 +2757,279 @@ window.toggleHydrationSlot = toggleHydrationSlot;
 window.showDayDetail = showDayDetail;
 
 /* =============================================================
+   START DNIA — guided morning flow + MIT na dashboardzie
+   ============================================================= */
+
+let morningChoices = {}; // { mood, mitTaskId, waterDone, focusMins }
+let morningStep = 1;
+
+function shouldShowMorningFlow() {
+    if (!state.settings.morningFlowEnabled) return false;
+    const t = today();
+    if (state.settings.morningFlowLastShown === t) return false;
+    const hour = new Date().getHours();
+    if (hour >= 14) return false; // popołudnie — pomiń
+    return true;
+}
+
+function startMorningFlow() {
+    morningStep = 1;
+    morningChoices = {};
+
+    // Powitanie zależne od godziny
+    const h = new Date().getHours();
+    const greet = h < 7 ? 'Wcześnie wstałeś 🌅' : h < 10 ? 'Dzień dobry 👋' : h < 12 ? 'Cześć ☀️' : 'Hej 👋';
+    $('#morningGreeting').textContent = greet;
+
+    // Wyświetl flow
+    $('#morningFlow').classList.remove('hidden');
+    renderMorningStep(1);
+    document.body.style.overflow = 'hidden';
+}
+
+function renderMorningStep(n) {
+    morningStep = n;
+    // Aktualizuj kropki postępu (4 kroki + zakończenie nie ma kropki)
+    document.querySelectorAll('.morning-dot').forEach(d => {
+        const idx = Number(d.dataset.dot);
+        d.classList.toggle('active', idx === n);
+        d.classList.toggle('done', idx < n);
+    });
+    // Pokaż właściwy krok
+    document.querySelectorAll('.morning-step').forEach(s => {
+        s.classList.toggle('active', Number(s.dataset.step) === n);
+    });
+
+    // Specyficzne dla kroku
+    if (n === 2) renderMorningMITList();
+    if (n === 5) renderMorningSummary();
+}
+
+function renderMorningMITList() {
+    const list = $('#morningMITList');
+    const active = state.tasks.filter(t => t.status === 'active').slice(0, 6);
+    if (active.length === 0) {
+        list.innerHTML = '<div class="morning-mit-empty">Nie masz jeszcze żadnych zadań. Dodaj poniżej.</div>';
+        $('#morningMITNew').classList.remove('hidden');
+        $('#morningMITOther').classList.add('hidden');
+        return;
+    }
+    list.innerHTML = active.map(t => `
+        <button class="morning-mit-task" data-task-id="${t.id}">
+            <span>${escapeHTML(t.title)}</span>
+            <span class="task-xp-pill">💎 ${t.points}</span>
+        </button>
+    `).join('');
+    $('#morningMITNew').classList.add('hidden');
+    $('#morningMITOther').classList.remove('hidden');
+
+    list.querySelectorAll('.morning-mit-task').forEach(btn => {
+        btn.addEventListener('click', () => {
+            morningChoices.mitTaskId = btn.dataset.taskId;
+            renderMorningStep(3);
+        });
+    });
+}
+
+function renderMorningSummary() {
+    const moods = { 1:'😫 Ciężko', 2:'😕 Słabo', 3:'😐 OK', 4:'🙂 Dobrze', 5:'🔥 Mocno' };
+    const mitTask = morningChoices.mitTaskId ? state.tasks.find(x => x.id === morningChoices.mitTaskId) : null;
+    const items = [];
+    if (morningChoices.mood) {
+        items.push(`<div class="sum-item"><span class="sum-icon">💭</span><span>Nastrój: <strong>${moods[morningChoices.mood]}</strong></span></div>`);
+    }
+    if (mitTask) {
+        items.push(`<div class="sum-item"><span class="sum-icon">🎯</span><span>MIT: <strong>${escapeHTML(mitTask.title)}</strong></span></div>`);
+    }
+    if (morningChoices.waterDone) {
+        items.push(`<div class="sum-item"><span class="sum-icon">💧</span><span>Szklanka wody zaliczona</span></div>`);
+    }
+    if (morningChoices.focusMins) {
+        items.push(`<div class="sum-item"><span class="sum-icon">⚡</span><span>Pomodoro: <strong>${morningChoices.focusMins} min</strong></span></div>`);
+    }
+    items.push(`<div class="sum-item"><span class="sum-icon">💎</span><span>+15 XP za poranny rytuał</span></div>`);
+    $('#morningSummary').innerHTML = items.join('');
+}
+
+function completeMorningFlow({ skipped = false } = {}) {
+    state.settings.morningFlowLastShown = today();
+
+    if (!skipped) {
+        // Zapisz wybory
+        const t = today();
+        if (morningChoices.mood) state.morningMoods[t] = morningChoices.mood;
+        if (morningChoices.mitTaskId) state.dailyMIT[t] = morningChoices.mitTaskId;
+        // Bonus XP za ukończenie rytuału
+        addXP(15);
+        updateStreak();
+    }
+
+    saveState();
+    closeMorningFlow();
+    renderDashboard();
+
+    // Jeśli wybrano focus, start sesji TERAZ
+    if (!skipped && morningChoices.focusMins) {
+        // Ustaw MIT jako taskId timera, jeśli istnieje
+        if (morningChoices.mitTaskId) {
+            state.timer.taskId = morningChoices.mitTaskId;
+        }
+        startPomodoro(morningChoices.focusMins);
+    }
+}
+
+function closeMorningFlow() {
+    $('#morningFlow').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+/* === Wybory: handlery === */
+document.querySelectorAll('.morning-mood-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.morning-mood-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        morningChoices.mood = Number(btn.dataset.mood);
+        // Auto-advance po 350ms (feedback potem przejście)
+        setTimeout(() => renderMorningStep(2), 350);
+    });
+});
+
+$('#morningMITOther')?.addEventListener('click', () => {
+    $('#morningMITNew').classList.remove('hidden');
+    $('#morningMITOther').classList.add('hidden');
+    setTimeout(() => $('#morningMITInput').focus(), 50);
+});
+
+$('#morningMITSave')?.addEventListener('click', () => {
+    const title = $('#morningMITInput').value.trim();
+    if (!title) { $('#morningMITInput').focus(); return; }
+    const points = Number($('#morningMITPoints').value);
+    // Stwórz nowe zadanie, ustaw jako MIT
+    const newTask = {
+        id: uid(),
+        title,
+        description: '',
+        startDate: today(),
+        endDate: today(),
+        status: 'active',
+        points,
+        completedAt: null,
+        createdAt: new Date().toISOString()
+    };
+    state.tasks.unshift(newTask);
+    morningChoices.mitTaskId = newTask.id;
+    renderMorningStep(3);
+});
+
+$('#morningWaterBtn')?.addEventListener('click', () => {
+    // Zaznacz pierwszy slot hydration na dziś (jeśli nie zaznaczony)
+    const slots = getTodayHydration();
+    if (!slots[0]) {
+        slots[0] = true;
+        addXP(10);
+    }
+    saveState();
+    morningChoices.waterDone = true;
+    $('#morningWaterBtn').classList.add('done');
+    $('#morningWaterBtn').querySelector('.water-text').textContent = '✓ Wypiłem!';
+    setTimeout(() => renderMorningStep(4), 600);
+});
+
+$('#morningWaterSkip')?.addEventListener('click', () => renderMorningStep(4));
+
+document.querySelectorAll('.morning-focus-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        morningChoices.focusMins = Number(btn.dataset.mins);
+        renderMorningStep(5);
+    });
+});
+
+$('#morningFocusLater')?.addEventListener('click', () => renderMorningStep(5));
+
+$('#morningStart')?.addEventListener('click', () => completeMorningFlow({ skipped: false }));
+$('#morningSkip')?.addEventListener('click', () => completeMorningFlow({ skipped: true }));
+
+/* === Manualny trigger z dashboardu / ustawień === */
+$('#startMorningBtn')?.addEventListener('click', startMorningFlow);
+$('#manualMorningBtn')?.addEventListener('click', () => {
+    // Reset stamp dnia żeby pozwolić ponownie
+    state.settings.morningFlowLastShown = null;
+    saveState();
+    startMorningFlow();
+});
+
+/* === Toggle w ustawieniach === */
+$('#morningFlowToggle')?.addEventListener('change', (e) => {
+    state.settings.morningFlowEnabled = !!e.target.checked;
+    saveState();
+});
+
+/* === KARTA MIT NA DASHBOARDZIE === */
+function renderMITCard() {
+    const t = today();
+    const mitId = state.dailyMIT[t];
+    const card = $('#mitCard');
+    const promptCard = $('#morningPrompt');
+    if (!card) return;
+
+    if (mitId) {
+        const task = state.tasks.find(x => x.id === mitId);
+        if (!task) {
+            card.classList.add('hidden');
+            return;
+        }
+        card.classList.remove('hidden');
+        card.classList.toggle('done', task.status === 'done');
+        $('#mitTaskTitle').textContent = task.title;
+        // Ukryj prompt jeśli MIT już ustawiona
+        if (promptCard) promptCard.classList.add('hidden');
+    } else {
+        card.classList.add('hidden');
+        // Pokaż prompt jeśli Start dnia jeszcze nieuruchomiony dziś
+        if (promptCard) {
+            const shown = state.settings.morningFlowLastShown === t;
+            promptCard.classList.toggle('hidden', shown);
+        }
+    }
+}
+
+$('#mitStartFocus')?.addEventListener('click', () => {
+    const t = today();
+    const mitId = state.dailyMIT[t];
+    if (!mitId) return;
+    state.timer.taskId = mitId;
+    saveState();
+    startPomodoro(25);
+});
+
+$('#mitMarkDone')?.addEventListener('click', () => {
+    const t = today();
+    const mitId = state.dailyMIT[t];
+    if (!mitId) return;
+    const task = state.tasks.find(x => x.id === mitId);
+    if (task && task.status !== 'done') {
+        toggleTask(mitId); // toggleTask zajmie się XP, streakiem, itd.
+    }
+    renderMITCard();
+});
+
+$('#mitClear')?.addEventListener('click', () => {
+    if (!confirm('Usunąć MIT z dzisiaj?')) return;
+    delete state.dailyMIT[today()];
+    saveState();
+    renderMITCard();
+});
+
+window.startMorningFlow = startMorningFlow;
+
+/* =============================================================
    INICJALIZACJA
    ============================================================= */
 function init() {
     // Wczytaj ustawienia do UI
     $('#dailyGoalInput').value = state.settings.dailyGoal;
     $('#notifToggle').checked = !!state.settings.notifications;
+    if ($('#morningFlowToggle')) $('#morningFlowToggle').checked = state.settings.morningFlowEnabled !== false;
 
     // Wznów timer, jeśli był aktywny
     if (state.timer.running && state.timer.startedAt) {
@@ -2790,6 +3066,11 @@ function init() {
         if (['dashboard', 'tasks', 'timer', 'journal', 'stats', 'habits', 'calendar', 'achievements', 'challenges', 'settings'].includes(v)) {
             switchView(v);
         }
+    }
+
+    // Auto-trigger Start dnia (jeśli rano + nie pokazane jeszcze + enabled)
+    if (shouldShowMorningFlow()) {
+        setTimeout(() => startMorningFlow(), 600); // delay żeby UI zdążyło się załadować
     }
 
     // Odśwież stan streaka — jeśli minął dzień bez akcji, wyzeruj

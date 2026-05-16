@@ -113,6 +113,32 @@
             <p class="quote" id="dailyQuote">"Dyscyplina jest mostem między celami a osiągnięciami."</p>
         </div>
 
+        <!-- KARTA MIT (Most Important Task — z porannego rytuału) -->
+        <div class="card mit-card hidden" id="mitCard">
+            <div class="mit-header">
+                <span class="mit-crown">👑</span>
+                <span class="mit-label">Twoja MIT na dziś</span>
+                <button class="mit-clear" id="mitClear" title="Usuń MIT">✕</button>
+            </div>
+            <div class="mit-task" id="mitTaskTitle">—</div>
+            <div class="mit-actions">
+                <button class="primary-btn big-btn" id="mitStartFocus">⚡ Rozpocznij pomodoro</button>
+                <button class="secondary-btn" id="mitMarkDone">✓ Zaznacz jako zrobione</button>
+            </div>
+        </div>
+
+        <!-- Przypomnienie o Start dnia jeśli niezrobione -->
+        <div class="card morning-prompt hidden" id="morningPrompt">
+            <div class="morning-prompt-content">
+                <span class="prompt-icon">🌅</span>
+                <div>
+                    <strong>Zacznij dzień z planem</strong>
+                    <small>30 sekund — mood, MIT, woda, focus. Zmienia całą dynamikę dnia.</small>
+                </div>
+                <button class="primary-btn" id="startMorningBtn">Start dnia ▶</button>
+            </div>
+        </div>
+
         <div class="dash-grid">
             <div class="card big-card">
                 <h3>Dzisiaj</h3>
@@ -751,6 +777,16 @@
         </div>
 
         <div class="card">
+            <h3>🌅 Start dnia</h3>
+            <label class="switch">
+                <input type="checkbox" id="morningFlowToggle" checked />
+                <span>Automatycznie pokaż rano (przed 14:00)</span>
+            </label>
+            <small>30-sekundowy guided flow: mood → MIT → woda → focus. Mocno wpływa na resztę dnia.</small>
+            <button class="primary-btn" id="manualMorningBtn">▶ Uruchom teraz</button>
+        </div>
+
+        <div class="card">
             <h3>💾 Eksport / Import danych</h3>
             <p>Przenoś swoje dane między urządzeniami.</p>
             <button class="primary-btn" id="exportBtn">⬇️ Eksportuj wszystko (JSON)</button>
@@ -878,6 +914,113 @@
         <div class="focus-timer" id="focusTimer">00:00:00</div>
         <p class="focus-task" id="focusTaskName">Głęboka praca</p>
         <button class="danger-btn big" id="exitFocus">✖ Zakończ sesję</button>
+    </div>
+</div>
+
+<!-- =========================================================
+     START DNIA — pełnoekranowy guided flow (~30 sek)
+     ========================================================= -->
+<div class="morning-flow hidden" id="morningFlow" role="dialog" aria-modal="true">
+    <button class="morning-skip" id="morningSkip" title="Pomiń">Pomiń ›</button>
+
+    <div class="morning-container">
+        <!-- Pasek postępu (4 kropki) -->
+        <div class="morning-progress">
+            <div class="morning-dot active" data-dot="1"></div>
+            <div class="morning-dot" data-dot="2"></div>
+            <div class="morning-dot" data-dot="3"></div>
+            <div class="morning-dot" data-dot="4"></div>
+        </div>
+
+        <!-- STEP 1: Powitanie + Mood -->
+        <div class="morning-step active" data-step="1">
+            <div class="morning-greeting" id="morningGreeting">Dzień dobry 👋</div>
+            <h2>Jak się dziś czujesz?</h2>
+            <p class="morning-sub">Twój poranny stan to dobre dane na potem.</p>
+            <div class="morning-mood-grid">
+                <button class="morning-mood-btn" data-mood="1"><span>😫</span><small>Ciężko</small></button>
+                <button class="morning-mood-btn" data-mood="2"><span>😕</span><small>Słabo</small></button>
+                <button class="morning-mood-btn" data-mood="3"><span>😐</span><small>OK</small></button>
+                <button class="morning-mood-btn" data-mood="4"><span>🙂</span><small>Dobrze</small></button>
+                <button class="morning-mood-btn" data-mood="5"><span>🔥</span><small>Mocno</small></button>
+            </div>
+        </div>
+
+        <!-- STEP 2: MIT (Most Important Task) -->
+        <div class="morning-step" data-step="2">
+            <div class="morning-emoji">🎯</div>
+            <h2>Co dziś jest najważniejsze?</h2>
+            <p class="morning-sub">Jedna rzecz. Jeśli zrobisz tylko to — dzień będzie udany.</p>
+
+            <div class="morning-mit-list" id="morningMITList"></div>
+
+            <div class="morning-mit-new hidden" id="morningMITNew">
+                <input type="text" id="morningMITInput" placeholder="Napisz najważniejsze zadanie..." maxlength="120">
+                <div class="morning-mit-points">
+                    <label>Trudność:</label>
+                    <select id="morningMITPoints">
+                        <option value="25" selected>🟡 Średnia (25 XP)</option>
+                        <option value="50">🟠 Trudna (50 XP)</option>
+                        <option value="100">🔴 Ekstremalna (100 XP)</option>
+                    </select>
+                </div>
+                <button class="morning-cta" id="morningMITSave">Zapisz i dalej →</button>
+            </div>
+
+            <button class="morning-mit-other" id="morningMITOther">+ Inne zadanie</button>
+        </div>
+
+        <!-- STEP 3: Woda -->
+        <div class="morning-step" data-step="3">
+            <div class="morning-emoji">💧</div>
+            <h2>Wypij szklankę wody</h2>
+            <p class="morning-sub">Najprostsza wygrana dnia. Mózg działa lepiej nawodniony.</p>
+
+            <button class="morning-water-btn" id="morningWaterBtn">
+                <span class="water-glow"></span>
+                <span class="water-text">Wypiłem ✓</span>
+                <small>+250 ml dziś</small>
+            </button>
+
+            <button class="morning-mit-other" id="morningWaterSkip">Pomiń krok ›</button>
+        </div>
+
+        <!-- STEP 4: Pierwsza sesja focus -->
+        <div class="morning-step" data-step="4">
+            <div class="morning-emoji">⚡</div>
+            <h2>Rozpocznij pierwszą sesję</h2>
+            <p class="morning-sub" id="morningFocusSub">Ile minut chcesz pracować nad MIT? Po sesji można dłużej.</p>
+
+            <div class="morning-focus-grid">
+                <button class="morning-focus-btn" data-mins="5">
+                    <strong>5</strong>
+                    <small>minut</small>
+                    <span class="focus-tag">Rozgrzewka</span>
+                </button>
+                <button class="morning-focus-btn primary" data-mins="25">
+                    <strong>25</strong>
+                    <small>minut</small>
+                    <span class="focus-tag">Pomodoro</span>
+                </button>
+                <button class="morning-focus-btn" data-mins="50">
+                    <strong>50</strong>
+                    <small>minut</small>
+                    <span class="focus-tag">Deep work</span>
+                </button>
+            </div>
+
+            <button class="morning-mit-other" id="morningFocusLater">Później (przejdź dalej) ›</button>
+        </div>
+
+        <!-- STEP 5: Podsumowanie -->
+        <div class="morning-step" data-step="5">
+            <div class="morning-complete">
+                <div class="complete-sun">🌅</div>
+                <h2>Gotowy do działania</h2>
+                <div class="morning-summary" id="morningSummary"></div>
+                <button class="morning-cta morning-start-btn" id="morningStart">Zaczynam ✓</button>
+            </div>
+        </div>
     </div>
 </div>
 

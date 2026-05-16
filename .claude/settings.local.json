@@ -21,7 +21,8 @@
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat\\(zadania\\): edycja wczesniej dodanych zadan przez modal\")",
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat\\(nawyki\\): ilustrowany wzrost — drzewko per nawyk + wielki ogrod dzienny \\(5 etapow sadzonka->kwitnaca wisnia\\)\")",
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"fix\\(dziennik\\): odczyt wpisu kontynuuje sie przy zmianie zakladki \\(zatrzymanie tylko przyciskiem Stop\\)\")",
-      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"fix\\(alarmy\\): tresc alarmu w tle — systemowe powiadomienie + wibracje + retry TTS przy powrocie + przycisk Odsluchaj ponownie\")"
+      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"fix\\(alarmy\\): tresc alarmu w tle — systemowe powiadomienie + wibracje + retry TTS przy powrocie + przycisk Odsluchaj ponownie\")",
+      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat: Start dnia — 30-sek guided flow \\(mood, MIT, woda, focus\\) + karta MIT na dashboardzie\")"
     ]
   }
 }
