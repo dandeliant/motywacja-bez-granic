@@ -865,6 +865,30 @@
 </div>
 
 <!-- =========================================================
+     MODAL — WYBÓR JĘZYKÓW DO WYDRUKU
+     ========================================================= -->
+<div class="modal-overlay hidden" id="printLangModal">
+    <div class="modal">
+        <h3>🖨️ Wybierz języki do wydruku</h3>
+        <p class="hint">Zaznacz, które wersje wpisów mają znaleźć się w pliku HTML do druku.</p>
+
+        <div class="print-lang-quick">
+            <button class="quick-btn" data-quick-print="pl">🇵🇱 Tylko polski</button>
+            <button class="quick-btn" data-quick-print="en">🇬🇧 Tylko angielski</button>
+            <button class="quick-btn" data-quick-print="all">🌍 Wszystkie</button>
+            <button class="quick-btn" data-quick-print="none">✕ Odznacz</button>
+        </div>
+
+        <div class="print-lang-list" id="printLangList"></div>
+
+        <div class="modal-actions">
+            <button class="secondary-btn" id="printLangCancel">Anuluj</button>
+            <button class="primary-btn" id="printLangConfirm">🖨️ Wygeneruj</button>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
      SPEECH BAR — pływający kontroler TTS dziennika
      ========================================================= -->
 <div class="speech-bar hidden" id="speechBar" role="status">

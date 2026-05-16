@@ -694,10 +694,11 @@ function renderTimerDaySummary() {
     const elAvg = $('#todayAvgSession');
     const elLong = $('#todayLongestSession');
 
-    if (elTotal) elTotal.textContent = formatHumanTime(totalSec);
+    // Dokładny czas HH:MM:SS — bez zaokrąglenia
+    if (elTotal) elTotal.textContent = formatTime(totalSec);
     if (elCount) elCount.textContent = count;
-    if (elAvg)   elAvg.textContent = count > 0 ? formatHumanTime(avg) : '—';
-    if (elLong)  elLong.textContent = count > 0 ? formatHumanTime(longest) : '—';
+    if (elAvg)   elAvg.textContent = count > 0 ? formatTime(avg) : '—';
+    if (elLong)  elLong.textContent = count > 0 ? formatTime(longest) : '—';
 }
 
 /* === BANNER POMOCY (zwijany na stałe) === */
@@ -1234,9 +1235,22 @@ $('#exportAllJournalText').addEventListener('click', () => {
     toast('⬇️ Eksport gotowy', `${state.journal.length} wpisów`, 'success');
 });
 
-/* === EKSPORT DO DRUKU (HTML) === */
-function entriesToPrintableHTML(entries) {
-    const rows = entries.map((e, i) => {
+/* === EKSPORT DO DRUKU (HTML) z filtrem języków === */
+function entriesToPrintableHTML(entries, selectedLangs = ['pl', 'en', 'de', 'fr', 'ru', 'es']) {
+    const includePl = selectedLangs.includes('pl');
+    // Filtr wpisów: jeśli PL niewybrany, pomiń wpisy bez żadnego pasującego tłumaczenia
+    const filtered = entries.filter(e => {
+        if (includePl) return true;
+        return e.translations && Object.keys(e.translations).some(c => selectedLangs.includes(c));
+    });
+
+    const langLabels = selectedLangs.map(c => {
+        if (c === 'pl') return '🇵🇱 Polski';
+        const l = JOURNAL_LANGS.find(x => x.code === c);
+        return l ? `${l.flag} ${l.label}` : c;
+    }).join(', ');
+
+    const rows = filtered.map((e, i) => {
         const d = new Date(e.date);
         let html = `<article class="entry">`;
         html += `<header class="entry-h">
@@ -1245,9 +1259,14 @@ function entriesToPrintableHTML(entries) {
             <span class="entry-time">${d.toLocaleTimeString('pl-PL', { hour:'2-digit', minute:'2-digit' })}</span>
             ${e.mood ? `<span class="entry-mood">${MOOD_LABELS[e.mood] || ''}</span>` : ''}
         </header>`;
-        html += `<div class="entry-body">${escapeHTML(e.content).replace(/\n/g, '<br>')}</div>`;
+        // Oryginalna treść (PL) — tylko jeśli wybrana
+        if (includePl) {
+            html += `<div class="entry-body">${escapeHTML(e.content).replace(/\n/g, '<br>')}</div>`;
+        }
+        // Tłumaczenia — tylko wybrane
         if (e.translations) {
             Object.entries(e.translations).forEach(([code, txt]) => {
+                if (!selectedLangs.includes(code)) return;
                 const l = JOURNAL_LANGS.find(x => x.code === code);
                 if (!l) return;
                 html += `<div class="entry-trans"><div class="trans-head">${l.flag} ${l.label}</div><div>${escapeHTML(txt).replace(/\n/g, '<br>')}</div></div>`;
@@ -1296,24 +1315,82 @@ function entriesToPrintableHTML(entries) {
 </head><body>
     <button class="print-btn no-print" onclick="window.print()">🖨️ Drukuj / Zapisz jako PDF</button>
     <h1>📓 Dziennik działań</h1>
-    <div class="meta">Eksport: ${new Date().toLocaleString('pl-PL')} • ${entries.length} wpisów</div>
+    <div class="meta">Eksport: ${new Date().toLocaleString('pl-PL')} • ${filtered.length} ${filtered.length === 1 ? 'wpis' : 'wpisów'} • Języki: ${langLabels}</div>
     ${rows}
 </body></html>`;
 }
 
+/* === MODAL: wybór języków do wydruku === */
 $('#exportAllJournalPrint').addEventListener('click', () => {
     if (state.journal.length === 0) { toast('Brak wpisów', '', 'warning'); return; }
-    const html = entriesToPrintableHTML(state.journal);
+    openPrintLangModal();
+});
+
+function openPrintLangModal() {
+    // Policz wystąpienia każdego języka
+    const counts = { pl: state.journal.length };
+    JOURNAL_LANGS.forEach(l => {
+        counts[l.code] = state.journal.filter(e => e.translations?.[l.code]).length;
+    });
+
+    // Zbuduj listę: PL na górze + 5 języków
+    const langs = [
+        { code: 'pl', flag: '🇵🇱', label: 'Polski (oryginalny)' },
+        ...JOURNAL_LANGS
+    ];
+    const list = $('#printLangList');
+    list.innerHTML = langs.map(l => {
+        const empty = counts[l.code] === 0;
+        const checked = !empty && (l.code === 'pl' || counts[l.code] > 0);
+        return `
+            <label class="print-lang-item ${empty ? 'empty' : ''}">
+                <input type="checkbox" value="${l.code}" ${checked ? 'checked' : ''} ${empty ? 'disabled' : ''}>
+                <span class="lang-label">${l.flag} ${l.label}</span>
+                <span class="lang-count">${counts[l.code]} ${counts[l.code] === 1 ? 'wpis' : 'wpisów'}</span>
+            </label>
+        `;
+    }).join('');
+
+    $('#printLangModal').classList.remove('hidden');
+}
+
+// Quick-action buttons
+document.querySelectorAll('[data-quick-print]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const mode = btn.dataset.quickPrint;
+        document.querySelectorAll('#printLangList input').forEach(cb => {
+            if (cb.disabled) return;
+            if (mode === 'all') cb.checked = true;
+            else if (mode === 'none') cb.checked = false;
+            else cb.checked = (cb.value === mode);
+        });
+    });
+});
+
+$('#printLangCancel')?.addEventListener('click', () => {
+    $('#printLangModal').classList.add('hidden');
+});
+
+$('#printLangConfirm')?.addEventListener('click', () => {
+    const checked = Array.from(document.querySelectorAll('#printLangList input:checked'))
+        .map(i => i.value);
+    if (checked.length === 0) {
+        toast('Wybierz co najmniej jeden język', '', 'warning');
+        return;
+    }
+    $('#printLangModal').classList.add('hidden');
+
+    const html = entriesToPrintableHTML(state.journal, checked);
     const win = window.open('', '_blank');
     if (!win) {
-        // Pop-up zablokowany — fallback: pobierz plik HTML
         downloadFile(html, `dziennik-${today()}.html`, 'text/html;charset=utf-8');
         toast('Pop-up zablokowany', 'Pobrałem plik HTML — otwórz go ręcznie', 'warning');
         return;
     }
     win.document.write(html);
     win.document.close();
-    toast('🖨️ Gotowe', 'Kliknij „Drukuj" lub zapisz jako PDF', 'success');
+    toast('🖨️ Gotowe', `Wydruk z ${checked.length} ${checked.length === 1 ? 'językiem' : 'językami'}`, 'success');
 });
 
 /* =============================================================
