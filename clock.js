@@ -111,7 +111,12 @@
     } catch (e) {}
 
     const save = () => { try { localStorage.setItem(SK, JSON.stringify(st)); } catch (e) {} };
-    const tr = (k) => T[st.language][k] !== undefined ? T[st.language][k] : T.pl[k];
+    // Pobierz słownik tłumaczeń — fallback do PL dla języków bez własnych etykiet UI (DE/FR/RU)
+    const dict = () => T[st.language] || T.pl;
+    const tr = (k) => {
+        const d = dict();
+        return d[k] !== undefined ? d[k] : T.pl[k];
+    };
 
     /* ========== POLISH TIME PHRASE ========== */
     const ORD12_PL = ['pierwsza','druga','trzecia','czwarta','piąta','szósta','siódma','ósma','dziewiąta','dziesiąta','jedenasta','dwunasta'];
@@ -134,7 +139,7 @@
         return m === 0 ? hp : hp + ' ' + cardinalPL(m);
     };
 
-    /* ========== ENGLISH TIME PHRASE ========== */
+    /* ========== ENGLISH TIME PHRASE (British style) ========== */
     const HOUR_EN = ['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve'];
     const NUM_EN = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty','twenty-one','twenty-two','twenty-three','twenty-four','twenty-five','twenty-six','twenty-seven','twenty-eight','twenty-nine'];
 
@@ -154,7 +159,129 @@
         return `it's ${w}${s} to ${nxw}`;
     };
 
-    const buildPhrase = (h, m, mode) => st.language === 'en' ? englishTime(h, m) : polishTime(h, m, mode);
+    /* ========== GERMAN TIME PHRASE ==========
+       Wzorzec: "Es ist X Uhr" / "Viertel nach X" / "halb [X+1]" / "Viertel vor [X+1]"
+       Uwaga: halb zawsze odnosi się do następnej godziny — "halb acht" = 7:30 */
+    const ONES_DE = ['null','eins','zwei','drei','vier','fünf','sechs','sieben','acht','neun','zehn','elf','zwölf','dreizehn','vierzehn','fünfzehn','sechzehn','siebzehn','achtzehn','neunzehn'];
+    const TENS_DE = ['','','zwanzig','dreißig','vierzig','fünfzig'];
+    const HOUR_DE = ['eins','zwei','drei','vier','fünf','sechs','sieben','acht','neun','zehn','elf','zwölf'];
+
+    const cardinalDE = (n) => {
+        if (n < 20) return ONES_DE[n];
+        const d = Math.floor(n / 10), o = n % 10;
+        if (o === 0) return TENS_DE[d];
+        // 21 = einundzwanzig
+        return ONES_DE[o] + 'und' + TENS_DE[d];
+    };
+
+    const germanTime = (h, m, mode) => {
+        let h12 = h % 12; if (h12 === 0) h12 = 12;
+        let nx12 = (h12 % 12) + 1; if (nx12 > 12) nx12 = 1;
+        const hWord = mode === '24'
+            ? (h === 0 ? 'null Uhr' : cardinalDE(h) + ' Uhr').replace(' Uhr', '')
+            : HOUR_DE[h12 - 1];
+        const nxWord = HOUR_DE[nx12 - 1];
+
+        if (m === 0)  return mode === '24' ? `Es ist ${hWord} Uhr` : `Es ist ${hWord} Uhr`;
+        if (m === 15) return `Es ist Viertel nach ${hWord}`;
+        if (m === 30) return `Es ist halb ${nxWord}`;
+        if (m === 45) return `Es ist Viertel vor ${nxWord}`;
+        if (m < 30)   return `Es ist ${cardinalDE(m)} nach ${hWord}`;
+        return `Es ist ${cardinalDE(60 - m)} vor ${nxWord}`;
+    };
+
+    /* ========== FRENCH TIME PHRASE ==========
+       Wzorzec: "Il est X heure(s)" / "et quart" / "et demie" / "moins le quart"
+       Specjalne: minuit (00:00), midi (12:00) */
+    const NUM_FR = ['zéro','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix','onze','douze','treize','quatorze','quinze','seize','dix-sept','dix-huit','dix-neuf'];
+    const TENS_FR = ['','','vingt','trente','quarante','cinquante'];
+
+    const cardinalFR = (n) => {
+        if (n < 20) return NUM_FR[n];
+        const d = Math.floor(n / 10), o = n % 10;
+        if (o === 0) return TENS_FR[d];
+        if (o === 1) return TENS_FR[d] + ' et un';     // vingt et un, trente et un
+        return TENS_FR[d] + '-' + NUM_FR[o];
+    };
+
+    const frenchTime = (h, m, mode) => {
+        // Specjalne: minuit / midi
+        if (m === 0 && h === 0)  return 'Il est minuit';
+        if (m === 0 && h === 12) return 'Il est midi';
+
+        let h12 = h % 12; if (h12 === 0) h12 = 12;
+        let nx = (h12 % 12) + 1; if (nx > 12) nx = 1;
+        const hWord  = NUM_FR[h12];
+        const nxWord = NUM_FR[nx];
+        const hSuf  = h12 === 1 ? 'heure'  : 'heures';
+        const nxSuf = nx  === 1 ? 'heure'  : 'heures';
+
+        if (m === 0)  return `Il est ${hWord} ${hSuf}`;
+        if (m === 15) return `Il est ${hWord} ${hSuf} et quart`;
+        if (m === 30) return `Il est ${hWord} ${hSuf} et demie`;
+        if (m === 45) return `Il est ${nxWord} ${nxSuf} moins le quart`;
+        if (m < 30)   return `Il est ${hWord} ${hSuf} ${cardinalFR(m)}`;
+        return `Il est ${nxWord} ${nxSuf} moins ${cardinalFR(60 - m)}`;
+    };
+
+    /* ========== RUSSIAN TIME PHRASE ==========
+       Wzorzec: "Сейчас X час/часа/часов Y минута/минуты/минут"
+       час: rodzaj męski → один, два...  минута: rodzaj żeński → одна, две... */
+    const ONES_RU_M = ['ноль','один','два','три','четыре','пять','шесть','семь','восемь','девять','десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать','шестнадцать','семнадцать','восемнадцать','девятнадцать'];
+    const ONES_RU_F = ['ноль','одна','две','три','четыре','пять','шесть','семь','восемь','девять','десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать','шестнадцать','семнадцать','восемнадцать','девятнадцать'];
+    const TENS_RU = ['','','двадцать','тридцать','сорок','пятьдесят'];
+
+    const cardinalRU = (n, feminine = false) => {
+        const ones = feminine ? ONES_RU_F : ONES_RU_M;
+        if (n < 20) return ones[n];
+        const d = Math.floor(n / 10), o = n % 10;
+        if (o === 0) return TENS_RU[d];
+        return TENS_RU[d] + ' ' + ones[o];
+    };
+
+    // Odmiana "час" wg liczby (Polish-style declension)
+    const hourFormRU = (n) => {
+        const lt = n % 100, last = n % 10;
+        if (lt >= 11 && lt <= 14) return 'часов';
+        if (last === 1) return 'час';
+        if (last >= 2 && last <= 4) return 'часа';
+        return 'часов';
+    };
+
+    const minuteFormRU = (n) => {
+        const lt = n % 100, last = n % 10;
+        if (lt >= 11 && lt <= 14) return 'минут';
+        if (last === 1) return 'минута';
+        if (last >= 2 && last <= 4) return 'минуты';
+        return 'минут';
+    };
+
+    const russianTime = (h, m, mode) => {
+        // Specjalne: полночь / полдень
+        if (m === 0 && h === 0)  return 'Сейчас полночь';
+        if (m === 0 && h === 12) return 'Сейчас полдень';
+
+        const displayH = mode === '24' ? h : (h % 12 || 12);
+        const hWord = cardinalRU(displayH, false);   // masculine
+        const hForm = hourFormRU(displayH);
+
+        if (m === 0) return `Сейчас ${hWord} ${hForm}`;
+
+        const mWord = cardinalRU(m, true);           // feminine for минута
+        const mForm = minuteFormRU(m);
+        return `Сейчас ${hWord} ${hForm} ${mWord} ${mForm}`;
+    };
+
+    /* ========== DISPATCH ========== */
+    const buildPhrase = (h, m, mode) => {
+        switch (st.language) {
+            case 'en': return englishTime(h, m);
+            case 'de': return germanTime(h, m, mode);
+            case 'fr': return frenchTime(h, m, mode);
+            case 'ru': return russianTime(h, m, mode);
+            default:   return polishTime(h, m, mode);
+        }
+    };
 
     /* ========== DOM REFS ========== */
     const $ = (id) => document.getElementById(id);
@@ -163,12 +290,12 @@
         period: $('clkPeriod'), progress: $('clkProgress'),
         phrase: $('clkPhrase'), nextInfo: $('clkNextInfo'),
         speaker: $('clkSpeaker'),
-        voice: $('clkVoice'), interval: $('clkInterval'),
+        interval: $('clkInterval'),
         hourSeg: $('clkHourModeSeg'), langSeg: $('clkLangSeg'),
         speakBtn: $('clkSpeakBtn'), wakeBtn: $('clkWakeBtn'),
         speakLbl: $('clkSpeakLbl'), wakeLbl: $('clkWakeLbl'),
         labelTime: $('clkLabelTime'), labelHowToSay: $('clkLabelHowToSay'),
-        labelVoice: $('clkLabelVoice'), labelFormat: $('clkLabelFormat'), labelInterval: $('clkLabelInterval'),
+        labelFormat: $('clkLabelFormat'), labelInterval: $('clkLabelInterval'),
         handHour: $('clkHandHour'), handMin: $('clkHandMin'), handSec: $('clkHandSec'),
         analogMarks: $('clkAnalogMarks'), analogNums: $('clkAnalogNums'),
 
@@ -221,75 +348,53 @@
         });
     })();
 
-    /* ========== VOICES ========== */
-    let voices = [], voicePL = null, voiceEN = null;
+    /* ========== VOICES — automatyczny dobór per język ========== */
+    let voices = [];
+    const voicePerLang = { pl: null, en: null, de: null, fr: null, ru: null };
+
+    // BCP 47 dla każdego języka (en = British)
+    const BCP = { pl: 'pl-PL', en: 'en-GB', de: 'de-DE', fr: 'fr-FR', ru: 'ru-RU' };
 
     const pickVoice = (list, lang) => {
-        if (lang === 'pl') {
-            const pl = list.filter(v => /^pl/i.test(v.lang) || /polish|zosia|paulina|ewa|agnieszka|krzysztof/i.test(v.name));
-            if (!pl.length) return null;
-            const order = [/google.*polish/i, /microsoft.*(zofia|paulina|agnieszka)/i, /natural|neural|online/i, /pl-PL/i, /./];
-            for (const p of order) { const h = pl.find(v => p.test(v.name) || p.test(v.lang)); if (h) return h; }
-            return pl[0];
+        if (lang === 'en') {
+            // BRITISH ENGLISH PRIORITY — Google UK > Microsoft natural > Apple > inne en-GB > fallback en
+            const gb = list.filter(v => v.lang.toLowerCase() === 'en-gb');
+            const priorities = [
+                v => /google.*(uk|british)/i.test(v.name),
+                v => /microsoft.*(libby|sonia|ryan|hazel|george|abbi|alfie|bella|maisie|noah|olivia|thomas)/i.test(v.name),
+                v => /^(daniel|kate|serena|oliver|martha|arthur|stephanie)/i.test(v.name),
+                v => /natural|neural|online|wavenet/i.test(v.name),
+                v => true
+            ];
+            for (const p of priorities) { const f = gb.find(p); if (f) return f; }
+            if (gb.length === 0) {
+                const anyEn = list.filter(v => /^en/i.test(v.lang));
+                return anyEn[0] || null;
+            }
+            return gb[0];
         }
-        const en = list.filter(v => /^en/i.test(v.lang));
-        if (!en.length) return null;
-        const order = [/google.*uk|google.*british/i, /microsoft.*(libby|sonia|ryan)/i, /en-GB/i, /natural|neural|online/i, /en-US/i, /./];
-        for (const p of order) { const h = en.find(v => p.test(v.name) || p.test(v.lang)); if (h) return h; }
-        return en[0];
+
+        // Pozostałe: pl, de, fr, ru
+        const prefix = lang;
+        const candidates = list.filter(v => v.lang.toLowerCase().startsWith(prefix));
+        if (!candidates.length) return null;
+        const priorities = [
+            v => /google/i.test(v.name),
+            v => /microsoft.*(natural|neural|online|wavenet)/i.test(v.name),
+            v => /natural|neural|wavenet/i.test(v.name),
+            v => v.lang.toLowerCase() === BCP[lang].toLowerCase(),
+            v => true
+        ];
+        for (const p of priorities) { const f = candidates.find(p); if (f) return f; }
+        return candidates[0];
     };
 
     const loadVoices = () => {
         voices = speechSynthesis.getVoices();
-        refs.voice.innerHTML = '';
-        const isPL = st.language === 'pl';
-        const primary = voices.filter(v => isPL ? /^pl/i.test(v.lang) : /^en/i.test(v.lang));
-        const others = voices.filter(v => !(isPL ? /^pl/i.test(v.lang) : /^en/i.test(v.lang)));
-
-        if (primary.length) {
-            const g = document.createElement('optgroup');
-            g.label = isPL ? 'Polskie głosy' : 'English voices';
-            primary.forEach(v => {
-                const o = document.createElement('option');
-                o.value = v.name; o.textContent = `${v.name} — ${v.lang}`;
-                g.appendChild(o);
-            });
-            refs.voice.appendChild(g);
-        }
-        if (others.length) {
-            const g = document.createElement('optgroup');
-            g.label = isPL ? 'Pozostałe' : 'Other languages';
-            others.slice(0, 30).forEach(v => {
-                const o = document.createElement('option');
-                o.value = v.name; o.textContent = `${v.name} — ${v.lang}`;
-                g.appendChild(o);
-            });
-            refs.voice.appendChild(g);
-        }
-
-        const storedKey = isPL ? 'voicePL' : 'voiceEN';
-        const stored = st[storedKey];
-        const found = stored && voices.find(v => v.name === stored);
-        const best = found || pickVoice(voices, st.language);
-        if (best) {
-            if (isPL) voicePL = best; else voiceEN = best;
-            refs.voice.value = best.name;
-        }
-        // Cicho dobierz głos dla drugiego języka
-        const otherLang = isPL ? 'en' : 'pl';
-        const otherStored = isPL ? st.voiceEN : st.voicePL;
-        const otherFound = otherStored && voices.find(v => v.name === otherStored);
-        const otherBest = otherFound || pickVoice(voices, otherLang);
-        if (otherBest) { if (otherLang === 'pl') voicePL = otherBest; else voiceEN = otherBest; }
+        ['pl','en','de','fr','ru'].forEach(lang => {
+            voicePerLang[lang] = pickVoice(voices, lang);
+        });
     };
-
-    refs.voice.addEventListener('change', () => {
-        const v = voices.find(vv => vv.name === refs.voice.value);
-        if (!v) return;
-        if (st.language === 'pl') { voicePL = v; st.voicePL = v.name; }
-        else { voiceEN = v; st.voiceEN = v.name; }
-        save();
-    });
 
     if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = loadVoices;
 
@@ -298,8 +403,8 @@
         if (!('speechSynthesis' in window)) return;
         try { speechSynthesis.cancel(); } catch (e) {}
         const u = new SpeechSynthesisUtterance(text);
-        u.lang = lang === 'en' ? 'en-GB' : 'pl-PL';
-        const v = lang === 'en' ? voiceEN : voicePL;
+        u.lang = BCP[lang] || 'pl-PL';
+        const v = voicePerLang[lang];
         if (v) u.voice = v;
         u.rate = 0.95; u.pitch = 1.0; u.volume = 1.0;
 
@@ -478,9 +583,9 @@
     });
 
     const applyTranslations = () => {
+        // UI ma tłumaczenia tylko dla PL i EN; dla DE/FR/RU używamy polskich etykiet (przez fallback dict())
         refs.labelTime.textContent = tr('timeNow');
         refs.labelHowToSay.textContent = tr('howToSay');
-        refs.labelVoice.textContent = tr('voice');
         refs.labelFormat.textContent = tr('format');
         refs.labelInterval.textContent = tr('interval');
         refs.speakLbl.textContent = tr('speakNow');
@@ -502,12 +607,13 @@
         refs.qWeekend.textContent = tr('qWeekend');
         refs.qNone.textContent = tr('qNone');
         refs.aText.placeholder = tr('phPlaceholder');
-        refs.aCancel.textContent = st.language === 'pl' ? 'Anuluj' : 'Cancel';
-        refs.aSave.textContent = st.language === 'pl' ? 'Zapisz alarm' : 'Save alarm';
-        refs.firingDismiss.textContent = (st.language === 'pl' ? '✖ Wyłącz alarm' : '✖ Dismiss');
-        const labels = T[st.language].intervals;
+        // Anuluj/Save — UI po polsku dla wszystkich poza EN
+        refs.aCancel.textContent = st.language === 'en' ? 'Cancel' : 'Anuluj';
+        refs.aSave.textContent   = st.language === 'en' ? 'Save alarm' : 'Zapisz alarm';
+        refs.firingDismiss.textContent = st.language === 'en' ? '✖ Dismiss' : '✖ Wyłącz alarm';
+        const intervalLabels = dict().intervals || T.pl.intervals;
         Array.from(refs.interval.options).forEach(o => {
-            if (labels[o.value] !== undefined) o.textContent = labels[o.value];
+            if (intervalLabels[o.value] !== undefined) o.textContent = intervalLabels[o.value];
         });
     };
 
@@ -643,7 +749,8 @@
 
     const renderDayChips = () => {
         refs.aDays.innerHTML = '';
-        T[st.language].days.forEach((lab, i) => {
+        const days = (dict().days) || T.pl.days;
+        days.forEach((lab, i) => {
             const b = document.createElement('button');
             b.className = 'day-chip' + (formDays[i] ? ' on' : '');
             b.textContent = lab;
@@ -739,7 +846,8 @@
         const total = st.alarms.length;
         const active = st.alarms.filter(a => a.enabled).length;
         refs.aCount.textContent = total;
-        refs.aStatus.textContent = total === 0 ? '' : T[st.language].alarmStatus(active, total);
+        const alarmStatusFn = dict().alarmStatus || T.pl.alarmStatus;
+        refs.aStatus.textContent = total === 0 ? '' : alarmStatusFn(active, total);
 
         if (total === 0) {
             const d = document.createElement('div');
@@ -752,7 +860,7 @@
         st.alarms.forEach(a => {
             const card = document.createElement('div');
             card.className = 'alarm-card' + (a.enabled ? ' enabled' : '');
-            const labels = T[st.language].days;
+            const labels = (dict().days) || T.pl.days;
             const daysHTML = labels.map((lab, i) =>
                 `<span class="day-pill${a.days[i] ? ' on' : ''}">${lab}</span>`
             ).join('');
@@ -784,7 +892,7 @@
         } else if (btn.dataset.act === 'edit') {
             openAlarmForm(a);
         } else if (btn.dataset.act === 'delete') {
-            const msg = st.language === 'pl' ? `Usunąć alarm "${a.text}"?` : `Delete alarm "${a.text}"?`;
+            const msg = st.language === 'en' ? `Delete alarm "${a.text}"?` : `Usunąć alarm "${a.text}"?`;
             if (confirm(msg)) {
                 st.alarms = st.alarms.filter(x => x.id !== a.id);
                 save();
