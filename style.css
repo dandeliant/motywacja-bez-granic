@@ -3044,6 +3044,14 @@ canvas { max-height: 280px; }
     margin-bottom: 40px;
 }
 
+.firing-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.firing-actions .big-btn { padding: 14px 28px; }
+
 /* ===== KARTA PLATFORM WIDGETÓW ===== */
 .widget-platforms {
     display: grid;

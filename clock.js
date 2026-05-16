@@ -322,6 +322,7 @@
         // Firing
         firing: $('clkFiring'), firingTime: $('clkFiringTime'),
         firingText: $('clkFiringText'), firingDismiss: $('clkFiringDismiss'),
+        firingRepeat: $('clkFiringRepeat'),
     };
 
     /* ========== ANALOG CLOCK BUILD ========== */
@@ -837,6 +838,15 @@
         save();
         renderAlarms();
         closeAlarmForm();
+
+        // Poproś o pozwolenie na powiadomienia (potrzebne by alarm w tle pokazał tekst)
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission().then(perm => {
+                if (perm === 'granted') {
+                    console.log('[alarm] Notifications enabled — alarm text will appear in system tray when app is backgrounded');
+                }
+            });
+        }
     });
 
     const escapeHtml = (s) => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -903,20 +913,110 @@
 
     /* ========== FIRING ========== */
     let firingId = null;
+    let firingAlarm = null;          // referencja do aktualnego alarmu (do retry)
+    let activeNotification = null;   // referencja do systemowego powiadomienia
+
+    // Wysłanie systemowego powiadomienia z tekstem alarmu —
+    // działa nawet gdy aplikacja jest w tle (TTS w tle nie działa, notification tak)
+    const showAlarmNotification = (a) => {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+        const title = '⏰ ' + a.time;
+        const opts = {
+            body: a.text,
+            icon: 'icon.svg',
+            badge: 'icon.svg',
+            requireInteraction: true,       // nie znika sama
+            tag: 'mbg-alarm-' + a.id,
+            renotify: true,
+            silent: false,
+            vibrate: [400, 100, 400, 100, 800],
+            data: { alarmId: a.id, url: './index.html#clock' }
+        };
+
+        // Najpierw spróbuj przez service worker (bardziej niezawodne na Androidzie/iOS)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(reg => {
+                return reg.showNotification(title, opts);
+            }).catch(() => {
+                // Fallback: zwykła Notification z page context
+                try {
+                    activeNotification = new Notification(title, opts);
+                    activeNotification.onclick = () => { window.focus(); activeNotification.close(); };
+                } catch (e) {}
+            });
+        } else {
+            try {
+                activeNotification = new Notification(title, opts);
+                activeNotification.onclick = () => { window.focus(); activeNotification.close(); };
+            } catch (e) {}
+        }
+    };
+
+    // Wibracja jako backup sygnał na mobilkach
+    const vibrateAlarm = () => {
+        if ('vibrate' in navigator) {
+            try { navigator.vibrate([400, 100, 400, 100, 800]); } catch (e) {}
+        }
+    };
+
     const fireAlarm = (a) => {
         firingId = a.id;
+        firingAlarm = a;
         refs.firingTime.textContent = a.time;
         refs.firingText.textContent = a.text;
         refs.firing.classList.add('on');
+
         ding(880, 0.3);
         setTimeout(() => ding(660, 0.5), 350);
+
+        // TTS — zadziała tylko gdy aplikacja jest w foreground
         setTimeout(() => speak(a.text, a.language), 900);
+
+        // Powiadomienie systemowe z tekstem (gdy app w tle — to jedyna droga do tekstu)
+        showAlarmNotification(a);
+
+        // Wibracja na telefonie
+        vibrateAlarm();
+
+        // Spróbuj wybudzić okno
+        try { window.focus(); } catch (e) {}
     };
+
+    // Retry TTS gdy aplikacja wraca do foreground a alarm wciąż leci
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && firingAlarm && firingId) {
+            // Mała pauza żeby przeglądarka zdążyła wznowić speech synthesis engine
+            setTimeout(() => {
+                if (firingAlarm) speak(firingAlarm.text, firingAlarm.language);
+            }, 500);
+        }
+    });
+
+    // Przycisk "Odsłuchaj ponownie" — ręczny retry
+    refs.firingRepeat.addEventListener('click', () => {
+        if (firingAlarm) speak(firingAlarm.text, firingAlarm.language);
+    });
 
     refs.firingDismiss.addEventListener('click', () => {
         refs.firing.classList.remove('on');
         try { speechSynthesis.cancel(); } catch (e) {}
+        try { navigator.vibrate?.(0); } catch (e) {}
+        // Zamknij powiadomienie systemowe
+        if (activeNotification) {
+            try { activeNotification.close(); } catch (e) {}
+            activeNotification = null;
+        }
+        // Zamknij powiadomienia przez SW
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(reg => {
+                reg.getNotifications({ tag: 'mbg-alarm-' + (firingId || '') }).then(notifs => {
+                    notifs.forEach(n => n.close());
+                }).catch(() => {});
+            }).catch(() => {});
+        }
         firingId = null;
+        firingAlarm = null;
     });
 
     const checkAlarms = (h, m, now) => {
