@@ -127,6 +127,51 @@
             </div>
         </div>
 
+        <!-- "Nic mi się nie chce" — guzik ratunkowy + Freeze tokens -->
+        <div class="card emergency-card">
+            <div class="emergency-grid">
+                <div class="freeze-stat">
+                    <div class="freeze-icon">🧊</div>
+                    <div>
+                        <div class="freeze-count" id="freezeTokenCount">2</div>
+                        <small>żetony zamrożenia w tym miesiącu</small>
+                    </div>
+                </div>
+                <button class="cold-start-btn" id="coldStartBtn">
+                    🆘 <span>Nic mi się nie chce</span>
+                    <small>4-krokowa ścieżka ratunkowa</small>
+                </button>
+            </div>
+        </div>
+
+        <!-- "Pokonaj siebie" — porównanie z wczoraj -->
+        <div class="card beat-self-card" id="beatSelfCard">
+            <h3>🏆 Pokonaj siebie</h3>
+            <div class="beat-grid">
+                <div class="beat-col">
+                    <small>WCZORAJ</small>
+                    <strong id="beatYesterday">0h 0m</strong>
+                </div>
+                <div class="beat-vs">VS</div>
+                <div class="beat-col">
+                    <small>DZIŚ</small>
+                    <strong id="beatToday">0h 0m</strong>
+                </div>
+            </div>
+            <p class="beat-message" id="beatMessage">—</p>
+        </div>
+
+        <!-- Lista pokus -->
+        <div class="card temptations-card">
+            <h3>🚫 Lista pokus na dziś</h3>
+            <p class="card-sub">Co dziś świadomie omijasz? Mniej decyzji = więcej energii.</p>
+            <div class="temptation-add">
+                <input type="text" id="temptationInput" placeholder="np. Scroll w mediach społecznościowych" maxlength="80">
+                <button class="primary-btn" id="temptationAddBtn">+ Dodaj</button>
+            </div>
+            <div id="temptationsList" class="temptations-list"></div>
+        </div>
+
         <!-- Przypomnienie o Start dnia jeśli niezrobione -->
         <div class="card morning-prompt hidden" id="morningPrompt">
             <div class="morning-prompt-content">
@@ -397,6 +442,28 @@
         <div class="card">
             <h3>Analiza AI produktywności</h3>
             <div id="aiInsight" class="ai-insight">Zbieram dane...</div>
+        </div>
+
+        <!-- Projekcja "za rok" — compound effect -->
+        <div class="card projection-card">
+            <h3>🔮 Twoja projekcja za rok</h3>
+            <p class="card-sub">Jeśli utrzymasz obecne tempo — tak będzie wyglądać Twoja przyszłość:</p>
+            <div class="projection-grid" id="projectionGrid"></div>
+            <p class="projection-hint" id="projectionHint">Małe codzienne kroki → ogromna zmiana w skali roku.</p>
+        </div>
+
+        <!-- Energy chart -->
+        <div class="card">
+            <h3>⚡ Energia w czasie</h3>
+            <p class="card-sub">Loguj rano/południe/wieczór — po 14 dniach pokażę wzorce.</p>
+            <canvas id="chartEnergy"></canvas>
+            <div id="energyInsight" class="ai-insight" style="margin-top:14px"></div>
+        </div>
+
+        <!-- Tygodniowe / wieczorne reviews historia -->
+        <div class="card">
+            <h3>📔 Historia review</h3>
+            <div id="reviewsHistory"></div>
         </div>
     </section>
 
@@ -782,8 +849,21 @@
                 <input type="checkbox" id="morningFlowToggle" checked />
                 <span>Automatycznie pokaż rano (przed 14:00)</span>
             </label>
-            <small>30-sekundowy guided flow: mood → MIT → woda → focus. Mocno wpływa na resztę dnia.</small>
+            <small>30-sekundowy guided flow: mood → MIT → woda → focus.</small>
             <button class="primary-btn" id="manualMorningBtn">▶ Uruchom teraz</button>
+        </div>
+
+        <div class="card">
+            <h3>🌙 Koniec dnia + Tygodniowy review</h3>
+            <label class="switch">
+                <input type="checkbox" id="eveningFlowToggle" checked />
+                <span>Auto-przypomnij wieczorem (po 18:00)</span>
+            </label>
+            <small>Closure psychology — bez wieczornego review mózg „nosi" niedokończone sprawy.</small>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px">
+                <button class="primary-btn" id="manualEveningBtn" style="flex:1; min-width:160px">🌙 Koniec dnia</button>
+                <button class="primary-btn" id="manualWeeklyBtn" style="flex:1; min-width:160px">📅 Tygodniowy review</button>
+            </div>
         </div>
 
         <div class="card">
@@ -831,7 +911,18 @@
         <input type="text" id="taskTitle" placeholder="Np. Napisać rozdział książki" />
 
         <label>Opis</label>
-        <textarea id="taskDesc" rows="3" placeholder="Szczegóły, kontekst..."></textarea>
+        <textarea id="taskDesc" rows="2" placeholder="Szczegóły, kontekst..."></textarea>
+
+        <label>💡 Dlaczego ci na tym zależy?</label>
+        <textarea id="taskWhy" rows="2" placeholder="np. Bo skończenie tej książki otworzy mi nową ścieżkę kariery..."></textarea>
+        <small class="field-hint">To pole pomoże ci, gdy będziesz chciał odłożyć zadanie. Pokażemy ci to przy odkładaniu.</small>
+
+        <label>📋 Lista podzadań (opcjonalnie)</label>
+        <div class="subtasks-editor" id="subtasksEditor"></div>
+        <div class="subtask-add-row">
+            <input type="text" id="subtaskInput" placeholder="Dodaj podzadanie (np. „Naszkicować plan rozdziału")..." maxlength="100">
+            <button class="secondary-btn" id="subtaskAddBtn">+ Dodaj</button>
+        </div>
 
         <div class="row">
             <div>
@@ -844,13 +935,21 @@
             </div>
         </div>
 
-        <label>Priorytet / punkty (XP)</label>
-        <select id="taskPoints">
-            <option value="10">🟢 Łatwe — 10 XP</option>
-            <option value="25" selected>🟡 Średnie — 25 XP</option>
-            <option value="50">🟠 Trudne — 50 XP</option>
-            <option value="100">🔴 Ekstremalne — 100 XP</option>
-        </select>
+        <div class="row">
+            <div>
+                <label>Priorytet / punkty (XP)</label>
+                <select id="taskPoints">
+                    <option value="10">🟢 Łatwe — 10 XP</option>
+                    <option value="25" selected>🟡 Średnie — 25 XP</option>
+                    <option value="50">🟠 Trudne — 50 XP</option>
+                    <option value="100">🔴 Ekstremalne — 100 XP</option>
+                </select>
+            </div>
+            <div>
+                <label>Projekt (opcjonalnie)</label>
+                <select id="taskProject"><option value="">— bez projektu —</option></select>
+            </div>
+        </div>
 
         <div class="modal-actions">
             <button class="secondary-btn" id="cancelTask">Anuluj</button>
@@ -914,6 +1013,166 @@
         <div class="focus-timer" id="focusTimer">00:00:00</div>
         <p class="focus-task" id="focusTaskName">Głęboka praca</p>
         <button class="danger-btn big" id="exitFocus">✖ Zakończ sesję</button>
+    </div>
+</div>
+
+<!-- =========================================================
+     COLD START — "Nic mi się nie chce" (4-krokowa ścieżka ratunkowa)
+     ========================================================= -->
+<div class="morning-flow hidden cold-flow" id="coldFlow" role="dialog" aria-modal="true">
+    <button class="morning-skip" id="coldSkip">Pomiń ›</button>
+    <div class="morning-container">
+        <div class="morning-progress">
+            <div class="morning-dot active" data-cdot="1"></div>
+            <div class="morning-dot" data-cdot="2"></div>
+            <div class="morning-dot" data-cdot="3"></div>
+            <div class="morning-dot" data-cdot="4"></div>
+        </div>
+
+        <div class="morning-step active" data-cstep="1">
+            <div class="morning-emoji">💧</div>
+            <h2>Wypij szklankę wody</h2>
+            <p class="morning-sub">Nawodnienie = pierwsza wygrana. Nic nie wymaga zaufania ani odwagi.</p>
+            <button class="morning-water-btn" id="coldWater"><span class="water-text">Wypiłem ✓</span><small>+ 250 ml</small></button>
+        </div>
+
+        <div class="morning-step" data-cstep="2">
+            <div class="morning-emoji" id="breathEmoji">🫁</div>
+            <h2>3 głębokie oddechy</h2>
+            <p class="morning-sub" id="breathInstr">Wdech 4 sek, wstrzymaj 4 sek, wydech 6 sek. Powtórz 3×.</p>
+            <div class="breath-circle" id="breathCircle"><span id="breathPhase">Gotowy?</span></div>
+            <button class="morning-cta" id="coldBreathStart">▶ Rozpocznij oddech</button>
+        </div>
+
+        <div class="morning-step" data-cstep="3">
+            <div class="morning-emoji">🧹</div>
+            <h2>2 minuty sprzątania biurka</h2>
+            <p class="morning-sub">Otoczenie ma wpływ na umysł. Tylko 2 minuty.</p>
+            <div class="cold-clean-timer" id="cleanTimer">02:00</div>
+            <button class="morning-cta" id="coldCleanStart">▶ Start odliczania</button>
+        </div>
+
+        <div class="morning-step" data-cstep="4">
+            <div class="morning-emoji">⚡</div>
+            <h2>Mała sesja 5 minut</h2>
+            <p class="morning-sub">Jesteś już rozgrzany. Pierwsze 5 minut to najtrudniejsze. Start.</p>
+            <button class="morning-cta" id="coldStartPomodoro">🍅 Start 5 minut</button>
+            <button class="morning-mit-other" id="coldFinish">Zakończ rytuał ›</button>
+        </div>
+
+        <div class="morning-step" data-cstep="5">
+            <div class="morning-complete">
+                <div class="complete-sun">💪</div>
+                <h2>Wstałeś z dna</h2>
+                <p class="morning-sub">Najtrudniejszy moment masz za sobą. To, że tu jesteś, to już wygrana.</p>
+                <button class="morning-cta" id="coldDone">+20 XP • Zaczynam ✓</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     KONIEC DNIA — wieczorny review (~1 min)
+     ========================================================= -->
+<div class="morning-flow hidden evening-flow" id="eveningFlow" role="dialog" aria-modal="true">
+    <button class="morning-skip" id="eveningSkip">Pomiń ›</button>
+    <div class="morning-container">
+        <div class="morning-progress">
+            <div class="morning-dot active" data-edot="1"></div>
+            <div class="morning-dot" data-edot="2"></div>
+            <div class="morning-dot" data-edot="3"></div>
+            <div class="morning-dot" data-edot="4"></div>
+        </div>
+
+        <div class="morning-step active" data-estep="1">
+            <div class="morning-emoji">🌙</div>
+            <h2>Jak oceniasz dziś?</h2>
+            <p class="morning-sub">Skala 1-10. Bez analizowania — pierwsza myśl.</p>
+            <div class="score-grid" id="eveningScore">
+                <button class="score-btn" data-score="1">1</button>
+                <button class="score-btn" data-score="2">2</button>
+                <button class="score-btn" data-score="3">3</button>
+                <button class="score-btn" data-score="4">4</button>
+                <button class="score-btn" data-score="5">5</button>
+                <button class="score-btn" data-score="6">6</button>
+                <button class="score-btn" data-score="7">7</button>
+                <button class="score-btn" data-score="8">8</button>
+                <button class="score-btn" data-score="9">9</button>
+                <button class="score-btn" data-score="10">10</button>
+            </div>
+        </div>
+
+        <div class="morning-step" data-estep="2">
+            <div class="morning-emoji">✨</div>
+            <h2>Win dnia</h2>
+            <p class="morning-sub">Jedna rzecz, która się dziś udała — choćby drobna.</p>
+            <textarea id="eveningWin" rows="3" placeholder="np. Skończyłem raport, choć nie miałem ochoty..."></textarea>
+            <button class="morning-cta" id="eveningWinNext">Dalej →</button>
+        </div>
+
+        <div class="morning-step" data-estep="3">
+            <div class="morning-emoji">📝</div>
+            <h2>Lekcja / lose dnia</h2>
+            <p class="morning-sub">Co byś poprawił jutro? Bez wymówek, bez biczowania.</p>
+            <textarea id="eveningLose" rows="3" placeholder="np. Za dużo czasu na social media rano..."></textarea>
+            <button class="morning-cta" id="eveningLoseNext">Dalej →</button>
+        </div>
+
+        <div class="morning-step" data-estep="4">
+            <div class="morning-emoji">🎯</div>
+            <h2>MIT na jutro</h2>
+            <p class="morning-sub">Najważniejsza rzecz jutro. Zaplanowana wieczorem = 2× większa szansa.</p>
+            <div class="morning-mit-list" id="eveningMITList"></div>
+            <div class="morning-mit-new" id="eveningMITNew">
+                <input type="text" id="eveningMITInput" placeholder="Lub napisz nowe zadanie..." maxlength="120">
+            </div>
+            <button class="morning-cta" id="eveningSave">💾 Zapisz i zamknij dzień</button>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     TYGODNIOWY REVIEW (niedziela, ~5 min)
+     ========================================================= -->
+<div class="morning-flow hidden weekly-flow" id="weeklyFlow" role="dialog" aria-modal="true">
+    <button class="morning-skip" id="weeklySkip">Pomiń ›</button>
+    <div class="morning-container">
+        <div class="morning-step active">
+            <div class="morning-emoji">📅</div>
+            <h2>Tygodniowy przegląd</h2>
+            <p class="morning-sub">5 minut na zobaczenie wzorców tygodnia i ustawienie focusu na kolejny.</p>
+
+            <div class="week-stats" id="weekStatsBox"></div>
+
+            <label class="week-label">Co zadziałało w tym tygodniu?</label>
+            <textarea id="weeklyWorked" rows="2" placeholder="np. Codzienne pomodoro rano, dziennik wieczorem..."></textarea>
+
+            <label class="week-label">Co warto zmienić w kolejnym?</label>
+            <textarea id="weeklyChange" rows="2" placeholder="np. Mniej spotkań w środy, więcej focus w pon..."></textarea>
+
+            <label class="week-label">Główny focus na kolejny tydzień</label>
+            <input type="text" id="weeklyFocus" placeholder="np. Skończyć pierwszy szkic prezentacji" maxlength="120">
+
+            <button class="morning-cta" id="weeklySave">💾 Zapisz i zamknij tydzień (+50 XP)</button>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================
+     ENERGY PROMPT — szybki check 3×/dzień
+     ========================================================= -->
+<div class="energy-prompt hidden" id="energyPrompt">
+    <div class="energy-prompt-card">
+        <button class="energy-close" id="energyClose">✕</button>
+        <h3 id="energyTitle">⚡ Twoja energia teraz</h3>
+        <p>Szybki check — 1 klik. Po 14 dniach pokażę Ci wzorce.</p>
+        <div class="morning-mood-grid">
+            <button class="morning-mood-btn" data-energy="1"><span>😴</span><small>Wyczerpany</small></button>
+            <button class="morning-mood-btn" data-energy="2"><span>😪</span><small>Słabo</small></button>
+            <button class="morning-mood-btn" data-energy="3"><span>😐</span><small>OK</small></button>
+            <button class="morning-mood-btn" data-energy="4"><span>💪</span><small>Mocno</small></button>
+            <button class="morning-mood-btn" data-energy="5"><span>🚀</span><small>Pełna moc</small></button>
+        </div>
     </div>
 </div>
 

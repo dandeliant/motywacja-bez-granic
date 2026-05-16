@@ -39,6 +39,24 @@ const DEFAULT_STATE = {
     // Per-day snapshots — MIT, poranny mood
     dailyMIT: {},        // { isoDate: taskId }
     morningMoods: {},    // { isoDate: 1-5 }
+
+    // === NOWE: 10 funkcji motywacyjnych ===
+    eveningReviews: {},  // { isoDate: { score, win, lose, tomorrowMIT, note } }
+    eveningFlowLastShown: null,
+    eveningFlowEnabled: true,
+    weeklyReviews: {},   // { isoWeekStart: { bestDay, worstDay, focus, note } }
+    weeklyFlowLastShown: null,
+
+    freezeTokens: 2,
+    freezeTokensMonth: null,  // 'YYYY-MM' — kiedy ostatnio odnowione
+    freezesUsed: [],          // [iso, iso, ...]
+
+    energyLog: {},       // { isoDate: { morning: 1-5, noon: 1-5, evening: 1-5 } }
+
+    temptations: [],     // [{ id, text, date, status: 'pending'|'avoided'|'gave_in' }]
+
+    projects: [],        // [{ id, name, color, createdAt }] — taski mają opcjonalne projectId
+
     timer: {
         running: false,
         startedAt: null,
@@ -321,9 +339,22 @@ function openTaskModal(task = null) {
 
     $('#taskTitle').value = task?.title || '';
     $('#taskDesc').value = task?.description || '';
+    if ($('#taskWhy')) $('#taskWhy').value = task?.why || '';
     $('#taskStart').value = task?.startDate || today();
     $('#taskEnd').value = task?.endDate || '';
     $('#taskPoints').value = String(task?.points || 25);
+
+    // Subtaski
+    modalSubtasks = task?.subtasks ? structuredClone(task.subtasks) : [];
+    renderModalSubtasks();
+
+    // Projekt dropdown
+    const projSelect = $('#taskProject');
+    if (projSelect) {
+        projSelect.innerHTML = '<option value="">— bez projektu —</option>' +
+            (state.projects || []).map(p => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('');
+        projSelect.value = task?.projectId || '';
+    }
 
     // Tytuł modala + przycisk zapisu
     taskModal.querySelector('h3').textContent = isEdit ? '✏️ Edytuj zadanie' : 'Nowe zadanie';
@@ -353,6 +384,9 @@ $('#saveTask').addEventListener('click', () => {
     const data = {
         title,
         description: $('#taskDesc').value.trim(),
+        why: $('#taskWhy')?.value.trim() || '',
+        subtasks: structuredClone(modalSubtasks),
+        projectId: $('#taskProject')?.value || null,
         startDate: $('#taskStart').value || today(),
         endDate: $('#taskEnd').value || null,
         points: Number($('#taskPoints').value)
@@ -446,6 +480,21 @@ function renderTasks() {
 
     list.innerHTML = tasks.map(task => {
         const overdue = task.status === 'active' && task.endDate && task.endDate < t;
+        const subDone = (task.subtasks || []).filter(s => s.done).length;
+        const subTotal = (task.subtasks || []).length;
+        const project = task.projectId ? (state.projects || []).find(p => p.id === task.projectId) : null;
+        const subtasksHTML = subTotal > 0 ? `
+            <div class="task-subtasks">
+                ${task.subtasks.map(s => `
+                    <label class="task-subtask ${s.done ? 'done' : ''}">
+                        <input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleSubtask('${task.id}', '${s.id}')">
+                        <span>${escapeHTML(s.title)}</span>
+                    </label>
+                `).join('')}
+                <div class="task-subtask-progress">${subDone} / ${subTotal} podzadań</div>
+            </div>
+        ` : '';
+        const whyHTML = task.why && task.status !== 'done' ? `<div class="task-why">💡 ${escapeHTML(task.why)}</div>` : '';
         return `
             <div class="task-item ${task.status === 'done' ? 'done' : ''} ${overdue ? 'overdue' : ''}">
                 <div class="task-check ${task.status === 'done' ? 'checked' : ''}" onclick="toggleTask('${task.id}')">
@@ -457,8 +506,11 @@ function renderTasks() {
                         ${task.description ? `<span>${escapeHTML(task.description)}</span>` : ''}
                         ${task.endDate ? `<span>📅 ${formatDate(task.endDate)}</span>` : ''}
                         ${task.endDate && task.status !== 'done' ? `<span class="planned-countdown ${countdownClass(task.endDate, task.status)}">${daysUntilLabel(task.endDate)}</span>` : ''}
+                        ${project ? `<span>📁 ${escapeHTML(project.name)}</span>` : ''}
                         <span class="task-xp">💎 ${task.points} XP</span>
                     </div>
+                    ${subtasksHTML}
+                    ${whyHTML}
                 </div>
                 <div class="task-actions">
                     <button class="icon-btn" onclick="editTask('${task.id}')" title="Edytuj">✏️</button>
@@ -1505,6 +1557,11 @@ function renderStats() {
     renderWeeklyChart();
     renderMonthlyChart();
     renderAIInsight();
+
+    // Nowe wykresy/karty motywacyjne
+    renderProjection();
+    renderEnergyChart();
+    renderReviewsHistory();
 }
 
 function renderWeeklyChart() {
@@ -1803,6 +1860,11 @@ function renderDashboard() {
 
     // Karta MIT (Most Important Task) z Start dnia
     renderMITCard();
+
+    // Nowe karty motywacyjne
+    renderFreezeTokens();
+    renderBeatSelf();
+    renderTemptations();
 }
 
 /* =============================================================
@@ -3023,6 +3085,733 @@ $('#mitClear')?.addEventListener('click', () => {
 window.startMorningFlow = startMorningFlow;
 
 /* =============================================================
+   10 FUNKCJI MOTYWACYJNYCH
+   ============================================================= */
+
+/* ============ 1. FREEZE TOKENS — odnowienie + zachowanie streaka ============ */
+function refreshFreezeTokensIfNewMonth() {
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (state.freezeTokensMonth !== monthKey) {
+        state.freezeTokens = 2;
+        state.freezeTokensMonth = monthKey;
+        saveState();
+    }
+}
+
+function renderFreezeTokens() {
+    const el = $('#freezeTokenCount');
+    if (el) el.textContent = state.freezeTokens || 0;
+}
+
+// Przy wykrywaniu zerwanego streaka (>1 dzień przerwy) — zapytaj o freeze
+function maybeUseFreeze() {
+    const last = state.gamification.lastActiveDate;
+    if (!last) return;
+    const t = today();
+    const diff = Math.floor((new Date(t) - new Date(last)) / 86400000);
+    if (diff !== 1) return; // tylko gdy dokładnie 1 dzień przerwy (wczoraj)
+    if (state.freezeTokens <= 0) return;
+    if ((state.freezesUsed || []).includes(t)) return; // już użyty dziś
+
+    // Sprawdź czy wczoraj było coś zrobione
+    const yesterday = new Date(t); yesterday.setDate(yesterday.getDate() - 1);
+    const yIso = yesterday.toISOString().slice(0, 10);
+    const yActivity = state.activities.some(a => a.start.slice(0, 10) === yIso) ||
+                       state.tasks.some(tk => tk.completedAt && tk.completedAt.slice(0, 10) === yIso);
+    if (yActivity) return; // wczoraj coś było — streak nie powinien zostać zresetowany
+
+    // Streak by przepadł — zapytaj
+    const msg = `🧊 Wczoraj nic nie zrobiłeś — Twój streak ${state.gamification.streak} dni zaraz przepadnie.\n\nMasz ${state.freezeTokens} żetonów zamrożenia. Użyć jednego, żeby uratować streak?`;
+    if (confirm(msg)) {
+        state.freezeTokens--;
+        state.freezesUsed = state.freezesUsed || [];
+        state.freezesUsed.push(t);
+        // Zachowaj streak — wymyśl "lastActiveDate" jako wczoraj+1 = dziś
+        state.gamification.lastActiveDate = t;
+        saveState();
+        toast('🧊 Streak uratowany!', `Pozostały żetony: ${state.freezeTokens}`, 'success');
+        renderHeader();
+        renderFreezeTokens();
+    }
+}
+
+/* ============ 2. SUBTASKS — w modalu zadania ============ */
+let modalSubtasks = []; // tymczasowa lista podczas edycji
+
+function renderModalSubtasks() {
+    const editor = $('#subtasksEditor');
+    if (!editor) return;
+    if (modalSubtasks.length === 0) { editor.innerHTML = ''; return; }
+    editor.innerHTML = modalSubtasks.map((s, i) => `
+        <div class="subtask-row ${s.done ? 'done' : ''}">
+            <input type="checkbox" ${s.done ? 'checked' : ''} data-sub-idx="${i}" data-sub-action="toggle">
+            <span>${escapeHTML(s.title)}</span>
+            <button class="subtask-del" data-sub-idx="${i}" data-sub-action="del">✕</button>
+        </div>
+    `).join('');
+    editor.querySelectorAll('[data-sub-action]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            const idx = Number(el.dataset.subIdx);
+            if (el.dataset.subAction === 'toggle') modalSubtasks[idx].done = el.checked;
+            else if (el.dataset.subAction === 'del') {
+                modalSubtasks.splice(idx, 1);
+                renderModalSubtasks();
+            }
+        });
+    });
+}
+
+$('#subtaskAddBtn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const input = $('#subtaskInput');
+    const v = input.value.trim();
+    if (!v) return;
+    modalSubtasks.push({ id: uid(), title: v, done: false });
+    input.value = '';
+    renderModalSubtasks();
+    input.focus();
+});
+
+$('#subtaskInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $('#subtaskAddBtn').click(); }
+});
+
+// Toggle subtaska bezpośrednio z listy zadań
+window.toggleSubtask = function (taskId, subId) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task || !task.subtasks) return;
+    const sub = task.subtasks.find(s => s.id === subId);
+    if (!sub) return;
+    sub.done = !sub.done;
+    saveState();
+    renderTasks();
+    renderDashboard();
+};
+
+/* ============ 3. ENERGY TRACKING (3×/dzień) ============ */
+const ENERGY_TIMES = [
+    { id: 'morning', from: 6, to: 11, label: 'Poranna energia' },
+    { id: 'noon',    from: 12, to: 16, label: 'Energia popołudniem' },
+    { id: 'evening', from: 17, to: 22, label: 'Energia wieczorem' }
+];
+
+function getCurrentEnergySlot() {
+    const h = new Date().getHours();
+    return ENERGY_TIMES.find(t => h >= t.from && h <= t.to);
+}
+
+function shouldPromptEnergy() {
+    const slot = getCurrentEnergySlot();
+    if (!slot) return false;
+    const t = today();
+    if (state.energyLog[t]?.[slot.id]) return false; // już zalogowane
+    return true;
+}
+
+let energyPromptShown = false; // tylko raz na sesję per slot
+function maybePromptEnergy() {
+    if (energyPromptShown) return;
+    if (!shouldPromptEnergy()) return;
+    const slot = getCurrentEnergySlot();
+    if (!slot) return;
+    energyPromptShown = true;
+    $('#energyTitle').textContent = `⚡ ${slot.label}`;
+    $('#energyPrompt').classList.remove('hidden');
+}
+
+document.querySelectorAll('[data-energy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const slot = getCurrentEnergySlot();
+        if (!slot) { $('#energyPrompt').classList.add('hidden'); return; }
+        const t = today();
+        if (!state.energyLog[t]) state.energyLog[t] = {};
+        state.energyLog[t][slot.id] = Number(btn.dataset.energy);
+        saveState();
+        $('#energyPrompt').classList.add('hidden');
+        toast(`⚡ Zapisane`, slot.label, 'success');
+    });
+});
+
+$('#energyClose')?.addEventListener('click', () => $('#energyPrompt').classList.add('hidden'));
+
+// Wykres energii w stats
+let chartEnergyInstance = null;
+function renderEnergyChart() {
+    const canvas = $('#chartEnergy');
+    if (!canvas) return;
+    const labels = [];
+    const morningData = [];
+    const noonData = [];
+    const eveningData = [];
+    for (let i = 13; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const iso = d.toISOString().slice(0, 10);
+        labels.push(d.toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric' }));
+        const log = state.energyLog[iso] || {};
+        morningData.push(log.morning || null);
+        noonData.push(log.noon || null);
+        eveningData.push(log.evening || null);
+    }
+    if (chartEnergyInstance) chartEnergyInstance.destroy();
+    chartEnergyInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Rano', data: morningData, borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.1)', tension: 0.3, spanGaps: true },
+                { label: 'Południe', data: noonData, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', tension: 0.3, spanGaps: true },
+                { label: 'Wieczór', data: eveningData, borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', tension: 0.3, spanGaps: true }
+            ]
+        },
+        options: {
+            ...chartOptions('/5'),
+            scales: {
+                y: { min: 0, max: 5, ticks: { color: '#8b95a7', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                x: { ticks: { color: '#8b95a7' }, grid: { display: false } }
+            }
+        }
+    });
+
+    // Insighty po 14 dniach
+    const insight = computeEnergyInsight();
+    $('#energyInsight').innerHTML = insight;
+}
+
+function computeEnergyInsight() {
+    const entries = Object.entries(state.energyLog);
+    if (entries.length < 7) return `📊 Loguj energię przez kilka dni — po 14 dniach pokażę wzorce. Masz już ${entries.length} dni.`;
+
+    // Średnia per dzień tygodnia
+    const dowMap = {}; // 0-6 → [energy values]
+    entries.forEach(([iso, log]) => {
+        const day = new Date(iso).getDay();
+        const vals = Object.values(log).filter(Boolean);
+        if (vals.length === 0) return;
+        const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+        if (!dowMap[day]) dowMap[day] = [];
+        dowMap[day].push(avg);
+    });
+
+    const dowNames = ['Niedz', 'Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob'];
+    const dowAvg = Object.entries(dowMap).map(([d, vs]) => ({
+        day: dowNames[d],
+        avg: vs.reduce((s, v) => s + v, 0) / vs.length
+    }));
+    dowAvg.sort((a, b) => a.avg - b.avg);
+
+    const worst = dowAvg[0];
+    const best = dowAvg[dowAvg.length - 1];
+
+    return `📉 Najsłabszy dzień: <b>${worst.day}</b> (śr. ${worst.avg.toFixed(1)}/5)<br>
+            📈 Najmocniejszy dzień: <b>${best.day}</b> (śr. ${best.avg.toFixed(1)}/5)<br>
+            💡 Planuj najtrudniejsze rzeczy na ${best.day}, lżejsze na ${worst.day}.`;
+}
+
+/* ============ 4. PROJEKCJA "ZA ROK" ============ */
+function renderProjection() {
+    const grid = $('#projectionGrid');
+    if (!grid) return;
+
+    // Pobierz statystyki z ostatnich 30 dni
+    const now = Date.now();
+    const days30 = now - 30 * 86400000;
+    const recentTasks = state.tasks.filter(t => t.completedAt && new Date(t.completedAt).getTime() > days30);
+    const recentActivities = state.activities.filter(a => new Date(a.start).getTime() > days30);
+    const recentJournal = state.journal.filter(j => new Date(j.date).getTime() > days30);
+
+    const daysOfData = Math.min(30, Math.ceil((now - (state.gamification.lastActiveDate ? new Date(state.gamification.lastActiveDate).getTime() : now)) / 86400000) + 1);
+    const measureDays = Math.max(daysOfData, 7);
+
+    const tasksPerDay = recentTasks.length / measureDays;
+    const hoursPerDay = (recentActivities.reduce((s, a) => s + a.duration, 0) / 3600) / measureDays;
+    const xpPerDay = (state.gamification.xp - 0) / Math.max(1, daysOfData); // approximation
+    const journalPerDay = recentJournal.length / measureDays;
+
+    const yearTasks = Math.round(tasksPerDay * 365);
+    const yearHours = Math.round(hoursPerDay * 365);
+    const yearXP = Math.round(xpPerDay * 365);
+    const projectedLevel = Math.floor(Math.sqrt((state.gamification.xp + yearXP) / 100)) || state.gamification.level;
+    const yearJournal = Math.round(journalPerDay * 365);
+
+    grid.innerHTML = `
+        <div class="proj-item"><span class="proj-num">${yearTasks}</span><span class="proj-lbl">zadań</span></div>
+        <div class="proj-item"><span class="proj-num">${yearHours}h</span><span class="proj-lbl">focus</span></div>
+        <div class="proj-item"><span class="proj-num">LVL ${projectedLevel}</span><span class="proj-lbl">poziom</span></div>
+        <div class="proj-item"><span class="proj-num">${yearJournal}</span><span class="proj-lbl">wpisów</span></div>
+    `;
+
+    const hint = tasksPerDay >= 2
+        ? `🚀 Tempo dobre — utrzymaj a osiągniesz <b>${yearTasks} zadań rocznie</b>. To więcej niż większość ludzi w karierze.`
+        : tasksPerDay >= 0.5
+        ? `📈 Małe codzienne kroki dają ${yearTasks} zadań rocznie. Zwiększ do 2/dzień = ${Math.round(2 * 365)} rocznie.`
+        : `💡 Zacznij od 1 zadania dziennie. To 365 zadań rocznie = ogromna zmiana w skali roku.`;
+    $('#projectionHint').innerHTML = hint;
+}
+
+/* ============ 5. BEAT YOURSELF — pokonaj siebie ============ */
+function renderBeatSelf() {
+    const t = today();
+    const y = new Date(t); y.setDate(y.getDate() - 1);
+    const yIso = y.toISOString().slice(0, 10);
+
+    const todayMin = state.activities.filter(a => a.start.slice(0,10) === t).reduce((s,a) => s + a.duration, 0) / 60;
+    const yMin = state.activities.filter(a => a.start.slice(0,10) === yIso).reduce((s,a) => s + a.duration, 0) / 60;
+
+    const fmt = (m) => {
+        if (m < 60) return `${Math.round(m)} min`;
+        return `${Math.floor(m/60)}h ${Math.round(m%60)}m`;
+    };
+    $('#beatYesterday').textContent = fmt(yMin);
+    $('#beatToday').textContent = fmt(todayMin);
+
+    // Highlighty
+    document.querySelectorAll('.beat-col').forEach(c => c.classList.remove('winning'));
+    if (todayMin > yMin && yMin > 0) {
+        document.querySelectorAll('.beat-col')[1].classList.add('winning');
+    }
+
+    const diff = todayMin - yMin;
+    let msg;
+    if (yMin === 0 && todayMin === 0) {
+        msg = '🌱 Wczoraj 0 min. Dziś też 0. Zacznij sesję — to już pobije wczorajszy dzień.';
+    } else if (todayMin > yMin) {
+        msg = `🏆 Pobiłeś wczoraj o ${fmt(diff)}! Świetna robota.`;
+    } else if (todayMin === 0) {
+        msg = `🎯 Wczoraj zrobiłeś ${fmt(yMin)}. Pobij to dziś — zacznij choć 5 min.`;
+    } else {
+        const left = yMin - todayMin;
+        msg = `💪 Jeszcze ${fmt(left)} żeby pobić wczoraj. Możesz to zrobić.`;
+    }
+    $('#beatMessage').textContent = msg;
+}
+
+/* ============ 6. LISTA POKUS ============ */
+function renderTemptations() {
+    const t = today();
+    const list = (state.temptations || []).filter(x => x.date === t);
+    const container = $('#temptationsList');
+    if (!container) return;
+    if (list.length === 0) {
+        container.innerHTML = '<div class="card-sub" style="text-align:center; padding:6px 0">Brak pokus na dziś. Dodaj te, których chcesz świadomie uniknąć.</div>';
+        return;
+    }
+    container.innerHTML = list.map(t => `
+        <div class="temptation-item ${t.status}" data-temp-id="${t.id}">
+            <span class="temptation-text">${escapeHTML(t.text)}</span>
+            <button class="temp-btn win" data-temp-action="avoid" data-temp-id="${t.id}">✓ Uniknąłem</button>
+            <button class="temp-btn lose" data-temp-action="give" data-temp-id="${t.id}">✗ Uległem</button>
+            <button class="temp-btn del" data-temp-action="del" data-temp-id="${t.id}">🗑</button>
+        </div>
+    `).join('');
+    container.querySelectorAll('[data-temp-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.tempId;
+            const item = state.temptations.find(x => x.id === id);
+            if (!item) return;
+            const act = btn.dataset.tempAction;
+            if (act === 'avoid') {
+                item.status = item.status === 'avoided' ? 'pending' : 'avoided';
+                if (item.status === 'avoided') { addXP(5); toast('💪 Mocno', '+5 XP za świadomość', 'success'); }
+            } else if (act === 'give') {
+                item.status = item.status === 'gave_in' ? 'pending' : 'gave_in';
+            } else if (act === 'del') {
+                state.temptations = state.temptations.filter(x => x.id !== id);
+            }
+            saveState();
+            renderTemptations();
+        });
+    });
+}
+
+$('#temptationAddBtn')?.addEventListener('click', () => {
+    const v = $('#temptationInput').value.trim();
+    if (!v) return;
+    state.temptations = state.temptations || [];
+    state.temptations.push({ id: uid(), text: v, date: today(), status: 'pending' });
+    $('#temptationInput').value = '';
+    saveState();
+    renderTemptations();
+});
+
+$('#temptationInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('#temptationAddBtn').click();
+});
+
+/* ============ 7. COLD START — "Nic mi się nie chce" ============ */
+let coldStep = 1;
+function startColdFlow() {
+    coldStep = 1;
+    showColdStep(1);
+    $('#coldFlow').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+function showColdStep(n) {
+    coldStep = n;
+    document.querySelectorAll('[data-cdot]').forEach(d => {
+        const idx = Number(d.dataset.cdot);
+        d.classList.toggle('active', idx === n);
+        d.classList.toggle('done', idx < n);
+    });
+    document.querySelectorAll('[data-cstep]').forEach(s => {
+        s.classList.toggle('active', Number(s.dataset.cstep) === n);
+    });
+}
+function closeColdFlow() {
+    $('#coldFlow').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+$('#coldStartBtn')?.addEventListener('click', startColdFlow);
+$('#coldSkip')?.addEventListener('click', closeColdFlow);
+
+$('#coldWater')?.addEventListener('click', () => {
+    const slots = getTodayHydration();
+    if (!slots[0]) { slots[0] = true; addXP(5); }
+    saveState();
+    $('#coldWater').querySelector('.water-text').textContent = '✓ Świetnie!';
+    setTimeout(() => showColdStep(2), 500);
+});
+
+// Breath flow: 3 cykle 4-4-6
+$('#coldBreathStart')?.addEventListener('click', () => {
+    const circle = $('#breathCircle');
+    const phase = $('#breathPhase');
+    let cycle = 0;
+    function runCycle() {
+        if (cycle >= 3) { showColdStep(3); return; }
+        cycle++;
+        phase.textContent = 'Wdech';
+        circle.classList.remove('exhale', 'hold');
+        circle.classList.add('inhale');
+        setTimeout(() => {
+            phase.textContent = 'Wstrzymaj';
+            circle.classList.remove('inhale');
+            circle.classList.add('hold');
+        }, 4000);
+        setTimeout(() => {
+            phase.textContent = 'Wydech';
+            circle.classList.remove('hold');
+            circle.classList.add('exhale');
+        }, 8000);
+        setTimeout(runCycle, 14000);
+    }
+    runCycle();
+});
+
+let cleanInterval = null;
+$('#coldCleanStart')?.addEventListener('click', () => {
+    let remaining = 120;
+    const display = $('#cleanTimer');
+    clearInterval(cleanInterval);
+    cleanInterval = setInterval(() => {
+        remaining--;
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        display.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        if (remaining <= 0) {
+            clearInterval(cleanInterval);
+            display.textContent = '✓ Gotowe';
+            setTimeout(() => showColdStep(4), 800);
+        }
+    }, 1000);
+});
+
+$('#coldStartPomodoro')?.addEventListener('click', () => {
+    showColdStep(5);
+    startPomodoro(5);
+});
+$('#coldFinish')?.addEventListener('click', () => showColdStep(5));
+$('#coldDone')?.addEventListener('click', () => {
+    addXP(20);
+    updateStreak();
+    toast('💪 Wstałeś z dna', '+20 XP za pokonanie siebie', 'success');
+    closeColdFlow();
+});
+
+/* ============ 8. EVENING REVIEW — koniec dnia ============ */
+let eveningStep = 1;
+let eveningChoices = {};
+
+function shouldShowEveningFlow() {
+    if (!state.eveningFlowEnabled) return false;
+    const t = today();
+    if (state.eveningFlowLastShown === t) return false;
+    if (state.eveningReviews[t]) return false;
+    const h = new Date().getHours();
+    if (h < 18 || h > 23) return false;
+    return true;
+}
+
+function startEveningFlow() {
+    eveningStep = 1;
+    eveningChoices = {};
+    $('#eveningWin').value = '';
+    $('#eveningLose').value = '';
+    showEveningStep(1);
+    $('#eveningFlow').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    renderEveningMITList();
+}
+
+function showEveningStep(n) {
+    eveningStep = n;
+    document.querySelectorAll('[data-edot]').forEach(d => {
+        const idx = Number(d.dataset.edot);
+        d.classList.toggle('active', idx === n);
+        d.classList.toggle('done', idx < n);
+    });
+    document.querySelectorAll('[data-estep]').forEach(s => {
+        s.classList.toggle('active', Number(s.dataset.estep) === n);
+    });
+}
+
+function closeEveningFlow() {
+    $('#eveningFlow').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+document.querySelectorAll('.score-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.score-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        eveningChoices.score = Number(btn.dataset.score);
+        setTimeout(() => showEveningStep(2), 400);
+    });
+});
+
+$('#eveningWinNext')?.addEventListener('click', () => {
+    eveningChoices.win = $('#eveningWin').value.trim();
+    showEveningStep(3);
+});
+$('#eveningLoseNext')?.addEventListener('click', () => {
+    eveningChoices.lose = $('#eveningLose').value.trim();
+    showEveningStep(4);
+});
+
+function renderEveningMITList() {
+    const list = $('#eveningMITList');
+    const active = state.tasks.filter(t => t.status === 'active').slice(0, 5);
+    list.innerHTML = active.map(t => `
+        <button class="morning-mit-task" data-emit-id="${t.id}">
+            <span>${escapeHTML(t.title)}</span>
+            <span class="task-xp-pill">💎 ${t.points}</span>
+        </button>
+    `).join('');
+    list.querySelectorAll('[data-emit-id]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            list.querySelectorAll('[data-emit-id]').forEach(b => b.style.background = '');
+            btn.style.background = 'white';
+            btn.style.color = 'var(--ink)';
+            eveningChoices.tomorrowMITId = btn.dataset.emitId;
+        });
+    });
+}
+
+$('#eveningSave')?.addEventListener('click', () => {
+    const t = today();
+    const tomorrow = new Date(t); tomorrow.setDate(tomorrow.getDate() + 1);
+    const tIso = tomorrow.toISOString().slice(0, 10);
+
+    // Zapisz review
+    let mitId = eveningChoices.tomorrowMITId;
+    const newTitle = $('#eveningMITInput').value.trim();
+    if (newTitle && !mitId) {
+        // Stwórz nowe zadanie na jutro
+        const newTask = {
+            id: uid(),
+            title: newTitle,
+            description: '',
+            startDate: tIso,
+            endDate: tIso,
+            status: 'active',
+            points: 25,
+            completedAt: null,
+            createdAt: new Date().toISOString()
+        };
+        state.tasks.unshift(newTask);
+        mitId = newTask.id;
+    }
+    if (mitId) {
+        state.dailyMIT[tIso] = mitId;
+    }
+
+    state.eveningReviews[t] = {
+        score: eveningChoices.score || null,
+        win: eveningChoices.win || '',
+        lose: eveningChoices.lose || '',
+        tomorrowMIT: mitId || null,
+        savedAt: new Date().toISOString()
+    };
+    state.eveningFlowLastShown = t;
+    addXP(20);
+    saveState();
+    toast('🌙 Dzień zamknięty', '+20 XP za wieczorny review', 'success');
+    closeEveningFlow();
+    renderDashboard();
+});
+
+$('#eveningSkip')?.addEventListener('click', () => {
+    state.eveningFlowLastShown = today();
+    saveState();
+    closeEveningFlow();
+});
+
+/* ============ 9. TYGODNIOWY REVIEW (niedziela) ============ */
+function shouldShowWeeklyFlow() {
+    const now = new Date();
+    if (now.getDay() !== 0) return false; // tylko niedziela
+    if (now.getHours() < 18) return false;
+    const t = today();
+    if (state.weeklyFlowLastShown === t) return false;
+    return true;
+}
+
+function startWeeklyFlow() {
+    // Oblicz statystyki tygodnia
+    const now = new Date();
+    const stats = computeWeekStats();
+    $('#weekStatsBox').innerHTML = `
+        <div>📅 Tydzień: <strong>${stats.weekRange}</strong></div>
+        <div>✅ Ukończone zadania: <strong>${stats.tasksDone}</strong></div>
+        <div>⏱️ Łączny focus: <strong>${stats.totalHours}h ${stats.totalMins}m</strong></div>
+        <div>🔥 Streak: <strong>${state.gamification.streak} dni</strong></div>
+        <div>📈 Najlepszy dzień: <strong>${stats.bestDay}</strong></div>
+        <div>📉 Najsłabszy dzień: <strong>${stats.worstDay}</strong></div>
+    `;
+    $('#weeklyWorked').value = '';
+    $('#weeklyChange').value = '';
+    $('#weeklyFocus').value = '';
+    $('#weeklyFlow').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function computeWeekStats() {
+    const now = new Date();
+    const weekDays = [];
+    const dayStats = {};
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date(now); d.setDate(d.getDate() - i);
+        const iso = d.toISOString().slice(0, 10);
+        const label = d.toLocaleDateString('pl-PL', { weekday: 'long' });
+        weekDays.push(iso);
+        const sec = state.activities.filter(a => a.start.slice(0,10) === iso).reduce((s,a) => s + a.duration, 0);
+        const done = state.tasks.filter(t => t.completedAt && t.completedAt.slice(0,10) === iso).length;
+        const score = sec / 60 + done * 15; // łączony score
+        dayStats[iso] = { label, sec, done, score };
+    }
+    const totalSec = Object.values(dayStats).reduce((s, d) => s + d.sec, 0);
+    const tasksDone = Object.values(dayStats).reduce((s, d) => s + d.done, 0);
+
+    const sorted = Object.values(dayStats).sort((a, b) => b.score - a.score);
+    const bestDay = sorted[0].score > 0 ? sorted[0].label : '—';
+    const worstDay = sorted[sorted.length - 1].label;
+
+    const start = new Date(weekDays[0]);
+    const end = new Date(weekDays[weekDays.length - 1]);
+    const weekRange = `${start.getDate()} ${start.toLocaleDateString('pl-PL', { month: 'short' })} – ${end.getDate()} ${end.toLocaleDateString('pl-PL', { month: 'short' })}`;
+
+    return {
+        weekRange,
+        totalHours: Math.floor(totalSec / 3600),
+        totalMins: Math.floor((totalSec % 3600) / 60),
+        tasksDone,
+        bestDay,
+        worstDay
+    };
+}
+
+$('#weeklySave')?.addEventListener('click', () => {
+    const now = new Date();
+    const monday = new Date(now);
+    const dow = now.getDay() === 0 ? 6 : now.getDay() - 1;
+    monday.setDate(monday.getDate() - dow);
+    const weekKey = monday.toISOString().slice(0, 10);
+
+    state.weeklyReviews[weekKey] = {
+        worked: $('#weeklyWorked').value.trim(),
+        change: $('#weeklyChange').value.trim(),
+        focus: $('#weeklyFocus').value.trim(),
+        savedAt: new Date().toISOString()
+    };
+    state.weeklyFlowLastShown = today();
+    addXP(50);
+    saveState();
+    toast('📅 Tydzień zamknięty', '+50 XP za review', 'success');
+    $('#weeklyFlow').classList.add('hidden');
+    document.body.style.overflow = '';
+});
+
+$('#weeklySkip')?.addEventListener('click', () => {
+    state.weeklyFlowLastShown = today();
+    saveState();
+    $('#weeklyFlow').classList.add('hidden');
+    document.body.style.overflow = '';
+});
+
+$('#manualEveningBtn')?.addEventListener('click', () => {
+    state.eveningFlowLastShown = null;
+    saveState();
+    startEveningFlow();
+});
+$('#manualWeeklyBtn')?.addEventListener('click', () => {
+    state.weeklyFlowLastShown = null;
+    saveState();
+    startWeeklyFlow();
+});
+
+$('#eveningFlowToggle')?.addEventListener('change', (e) => {
+    state.eveningFlowEnabled = !!e.target.checked;
+    saveState();
+});
+
+/* ============ 10. RENDER REVIEW HISTORY (w stats) ============ */
+function renderReviewsHistory() {
+    const container = $('#reviewsHistory');
+    if (!container) return;
+
+    const evenings = Object.entries(state.eveningReviews || {})
+        .sort(([a], [b]) => b.localeCompare(a))
+        .slice(0, 7);
+    const weeklies = Object.entries(state.weeklyReviews || {})
+        .sort(([a], [b]) => b.localeCompare(a))
+        .slice(0, 4);
+
+    if (evenings.length === 0 && weeklies.length === 0) {
+        container.innerHTML = '<p class="card-sub">Brak review jeszcze. Uruchom Koniec dnia lub Tygodniowy review.</p>';
+        return;
+    }
+
+    let html = '';
+    if (weeklies.length > 0) {
+        html += '<h4>📅 Tygodniowe</h4>';
+        html += weeklies.map(([k, r]) => `
+            <div class="review-entry weekly">
+                <div class="review-date">Tydzień od ${formatDate(k)}</div>
+                <div class="review-content">
+                    ${r.focus ? `<b>🎯 Focus:</b> ${escapeHTML(r.focus)}<br>` : ''}
+                    ${r.worked ? `<b>✓ Co działało:</b> ${escapeHTML(r.worked)}<br>` : ''}
+                    ${r.change ? `<b>↻ Co zmienić:</b> ${escapeHTML(r.change)}` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+    if (evenings.length > 0) {
+        html += '<h4 style="margin-top:16px">🌙 Wieczorne</h4>';
+        html += evenings.map(([k, r]) => `
+            <div class="review-entry">
+                <div class="review-date">${formatDate(k)} ${r.score ? `<span class="review-score">• ${r.score}/10</span>` : ''}</div>
+                <div class="review-content">
+                    ${r.win ? `<b>✨ Win:</b> ${escapeHTML(r.win)}<br>` : ''}
+                    ${r.lose ? `<b>📝 Lekcja:</b> ${escapeHTML(r.lose)}` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+    container.innerHTML = html;
+}
+
+/* =============================================================
    INICJALIZACJA
    ============================================================= */
 function init() {
@@ -3046,10 +3835,22 @@ function init() {
 
     seedDefaultHabits();
     buildJournalLangFields();
+    refreshFreezeTokensIfNewMonth();
+    maybeUseFreeze();
     renderHeader();
     renderDashboard();
     renderTimerTaskSelect();
     checkAchievements();
+
+    // Ustawienia z nowych funkcji
+    if ($('#eveningFlowToggle')) $('#eveningFlowToggle').checked = state.eveningFlowEnabled !== false;
+
+    // Auto-trigger evening / weekly / energy
+    setTimeout(() => {
+        if (shouldShowEveningFlow()) startEveningFlow();
+        else if (shouldShowWeeklyFlow()) startWeeklyFlow();
+        else maybePromptEnergy();
+    }, 1500);
 
     // Wymuś załadowanie głosów TTS — niektóre przeglądarki ładują lazy
     if ('speechSynthesis' in window) {
