@@ -865,6 +865,20 @@
 </div>
 
 <!-- =========================================================
+     SPEECH BAR — pływający kontroler TTS dziennika
+     ========================================================= -->
+<div class="speech-bar hidden" id="speechBar" role="status">
+    <div class="speech-bar-info">
+        <span class="speech-icon">🔊</span>
+        <div class="speech-bar-text">
+            <strong id="speechBarLang">Czytam wpis</strong>
+            <small id="speechBarPreview"></small>
+        </div>
+    </div>
+    <button class="speech-stop-btn" id="speechStopBtn">⏹ Zatrzymaj odczyt</button>
+</div>
+
+<!-- =========================================================
      ALARM URUCHOMIONY — FULLSCREEN OVERLAY
      ========================================================= -->
 <div class="firing" id="clkFiring" role="alertdialog" aria-modal="true">

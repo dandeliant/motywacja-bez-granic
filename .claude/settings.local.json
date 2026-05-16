@@ -12,7 +12,9 @@
       "Bash(git add *)",
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat: dodaj Mówiący Zegar — zegar z TTS, minutnik z głosem, alarmy z własnymi frazami \\(PL/EN\\)\")",
       "Bash(git push *)",
-      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat: zbiorczy czas dnia w Timerze + pełna edycja nawyków z konfigurowalną historią \\(7/14/30/60 dni\\) + banner pomocy\")"
+      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat: zbiorczy czas dnia w Timerze + pełna edycja nawyków z konfigurowalną historią \\(7/14/30/60 dni\\) + banner pomocy\")",
+      "Bash(node -c clock.js)",
+      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat\\(dziennik\\): wyświetlanie tłumaczeń inline, floating Stop bar, pauza zegara podczas odczytu, British English picker, auto-stop przy zmianie zakładki\")"
     ]
   }
 }

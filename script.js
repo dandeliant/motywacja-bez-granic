@@ -247,6 +247,11 @@ function showLevelUp(lvl) {
    NAWIGACJA
    ============================================================= */
 function switchView(viewName) {
+    // Auto-stop odczytu dziennika gdy wychodzimy z zakładki Dziennik
+    if (viewName !== 'journal' && journalSpeakingActive) {
+        stopJournalSpeak();
+    }
+
     $$('.view').forEach(v => v.classList.remove('active'));
     $(`#view-${viewName}`).classList.add('active');
     $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === viewName));
@@ -721,17 +726,45 @@ const JOURNAL_LANGS = [
     { code: 'es', label: 'Español',    flag: '🇪🇸', bcp: 'es-ES' }
 ];
 
-// Wybiera najlepszy dostępny głos dla języka (preferuje Google → Microsoft Natural → cokolwiek)
+// Wybiera najlepszy dostępny głos — dla en-GB SILNIE preferuje brytyjskie głosy
 function pickBestJournalVoice(bcpCode) {
     if (!('speechSynthesis' in window)) return null;
     const voices = speechSynthesis.getVoices();
-    const prefix = bcpCode.split('-')[0].toLowerCase();
+    const target = bcpCode.toLowerCase();
+
+    // ===== SPECJALNY PRZYPADEK: British English =====
+    if (target === 'en-gb') {
+        const british = voices.filter(v => v.lang.toLowerCase() === 'en-gb');
+        const priorities = [
+            // Google UK voices (Android, Chrome desktop)
+            v => /google.*(uk|british)/i.test(v.name),
+            // Microsoft British natural voices (Windows)
+            v => /microsoft.*(libby|sonia|ryan|hazel|george|abbi|alfie|bella|maisie|noah|olivia|thomas)/i.test(v.name),
+            // Apple British voices (iOS, macOS)
+            v => /^(daniel|kate|serena|oliver|martha|arthur|stephanie)/i.test(v.name),
+            // Cokolwiek z en-GB
+            v => true
+        ];
+        for (const p of priorities) {
+            const found = british.find(p);
+            if (found) return found;
+        }
+        // Fallback: spróbuj inne en-* ale tylko jeśli BRAK en-GB
+        if (british.length === 0) {
+            const anyEn = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
+            return anyEn[0] || null;
+        }
+        return british[0];
+    }
+
+    // ===== POZOSTAŁE JĘZYKI =====
+    const prefix = target.split('-')[0];
     const candidates = voices.filter(v => v.lang.toLowerCase().startsWith(prefix));
     if (!candidates.length) return null;
     const priorities = [
         v => /google/i.test(v.name),
         v => /natural|neural|online|wavenet/i.test(v.name),
-        v => v.lang.toLowerCase() === bcpCode.toLowerCase(),
+        v => v.lang.toLowerCase() === target,
         v => true
     ];
     for (const p of priorities) {
@@ -741,16 +774,86 @@ function pickBestJournalVoice(bcpCode) {
     return candidates[0];
 }
 
-// Wymawia tekst w danym języku
+/* === GLOBALNY STAN ODCZYTU DZIENNIKA === */
+let journalSpeakingActive = false;
+let journalCurrentBadge = null;
 let journalCurrentUtterance = null;
-function speakJournalText(text, bcpCode, badgeEl = null) {
+
+// Wystaw stan globalnie, by clock.js mógł sprawdzić
+window.mbgTTSBusy = false;
+
+function emitTTSState(busy) {
+    window.mbgTTSBusy = busy;
+    window.dispatchEvent(new CustomEvent('mbg-tts-state', { detail: { busy } }));
+}
+
+// Pokaż floating bar
+function showSpeechBar(lang, text) {
+    const bar = $('#speechBar');
+    const langLbl = $('#speechBarLang');
+    const preview = $('#speechBarPreview');
+    if (!bar) return;
+    const l = JOURNAL_LANGS.find(x => x.code === lang);
+    const langName = lang === 'pl' ? '🇵🇱 Polski' : (l ? `${l.flag} ${l.label}` : 'Czytam');
+    langLbl.textContent = `Odtwarzam: ${langName}`;
+    preview.textContent = text.slice(0, 60).replace(/\n/g, ' ') + (text.length > 60 ? '…' : '');
+    bar.classList.remove('hidden');
+}
+
+function hideSpeechBar() {
+    const bar = $('#speechBar');
+    if (bar) bar.classList.add('hidden');
+}
+
+// Pokaż tłumaczenie w widoku wpisu (inline)
+function showTranslationView(entryId, lang, text) {
+    // Ukryj poprzednie
+    document.querySelectorAll('.entry-translation-view').forEach(v => v.classList.add('hidden'));
+    if (!entryId || lang === 'pl') return;
+    const view = document.querySelector(`.entry-translation-view[data-entry="${entryId}"]`);
+    if (!view) return;
+    const l = JOURNAL_LANGS.find(x => x.code === lang);
+    if (!l) return;
+    view.innerHTML = `
+        <div class="translation-header">
+            <span class="translation-flag">${l.flag}</span>
+            <span>${l.label}</span>
+        </div>
+        <div class="translation-text">${escapeHTML(text).replace(/\n/g, '<br>')}</div>
+    `;
+    view.classList.remove('hidden');
+}
+
+// Zatrzymaj odczyt (uniwersalna funkcja)
+function stopJournalSpeak() {
+    try { speechSynthesis.cancel(); } catch (e) {}
+    document.querySelectorAll('.lang-badge.speaking, .icon-btn.speaking').forEach(b => b.classList.remove('speaking'));
+    journalSpeakingActive = false;
+    journalCurrentBadge = null;
+    journalCurrentUtterance = null;
+    hideSpeechBar();
+    emitTTSState(false);
+}
+
+// Główna funkcja czytania
+function speakJournalText(text, bcpCode, badgeEl = null, entryId = null, lang = null) {
     if (!('speechSynthesis' in window)) {
         toast('Brak TTS', 'Twoja przeglądarka nie obsługuje syntezy mowy', 'warning');
         return;
     }
+
+    // Klik w ten sam przycisk = zatrzymaj
+    if (journalCurrentBadge === badgeEl && journalSpeakingActive) {
+        stopJournalSpeak();
+        return;
+    }
+
+    // Zatrzymaj poprzednie (różny badge lub nic nie gra)
     try { speechSynthesis.cancel(); } catch (e) {}
-    // Usuń klasę 'speaking' z poprzednich
-    document.querySelectorAll('.lang-badge.speaking').forEach(b => b.classList.remove('speaking'));
+    document.querySelectorAll('.lang-badge.speaking, .icon-btn.speaking').forEach(b => b.classList.remove('speaking'));
+
+    // Pokaż tłumaczenie w wpisie (jeśli nie polski)
+    showTranslationView(entryId, lang, text);
 
     const u = new SpeechSynthesisUtterance(text);
     u.lang = bcpCode;
@@ -760,12 +863,45 @@ function speakJournalText(text, bcpCode, badgeEl = null) {
     u.pitch = 1.0;
     u.volume = 1.0;
 
-    if (badgeEl) {
-        badgeEl.classList.add('speaking');
-        u.onend = u.onerror = () => badgeEl.classList.remove('speaking');
-    }
+    // Stan
+    journalSpeakingActive = true;
+    journalCurrentBadge = badgeEl;
     journalCurrentUtterance = u;
+    if (badgeEl) badgeEl.classList.add('speaking');
+    showSpeechBar(lang || 'pl', text);
+    emitTTSState(true);
+
+    const endHandler = () => {
+        if (badgeEl) badgeEl.classList.remove('speaking');
+        if (journalCurrentBadge === badgeEl) {
+            journalSpeakingActive = false;
+            journalCurrentBadge = null;
+            journalCurrentUtterance = null;
+            hideSpeechBar();
+            emitTTSState(false);
+        }
+    };
+    u.onend = endHandler;
+    u.onerror = endHandler;
+
     speechSynthesis.speak(u);
+
+    // Bezpiecznik: Chrome czasem zatrzymuje TTS przy dłuższym tekście — keepalive trick
+    keepSpeechAlive();
+}
+
+// Workaround: Chrome zatrzymuje speechSynthesis po ~15 sek bez tego
+let speechKeepAliveTimer = null;
+function keepSpeechAlive() {
+    clearInterval(speechKeepAliveTimer);
+    speechKeepAliveTimer = setInterval(() => {
+        if (speechSynthesis.speaking && !speechSynthesis.paused) {
+            speechSynthesis.pause();
+            speechSynthesis.resume();
+        } else {
+            clearInterval(speechKeepAliveTimer);
+        }
+    }, 12000);
 }
 
 /* === MOOD PICKER (z obsługą edycji) === */
@@ -969,6 +1105,7 @@ function renderJournal() {
                 </div>
                 <div class="journal-content">${escapeHTML(e.content)}</div>
                 ${transBadges ? `<div class="lang-badges">🔊 Odsłuchaj w: ${transBadges}</div>` : ''}
+                ${e.translations ? `<div class="entry-translation-view hidden" data-entry="${e.id}"></div>` : ''}
                 ${e.editedAt ? `<div class="entry-edited">edytowano: ${formatDateTime(e.editedAt)}</div>` : ''}
             </div>
         `;
@@ -1011,9 +1148,12 @@ $('#journalList').addEventListener('click', (e) => {
             const l = JOURNAL_LANGS.find(x => x.code === lang);
             bcp = l?.bcp || 'en-GB';
         }
-        if (text) speakJournalText(text, bcp, target);
+        if (text) speakJournalText(text, bcp, target, id, lang);
     }
 });
+
+/* === Przycisk „Zatrzymaj odczyt" + auto-stop przy zmianie zakładki === */
+$('#speechStopBtn')?.addEventListener('click', stopJournalSpeak);
 
 $('#journalList').addEventListener('change', (e) => {
     if (e.target.matches('.entry-select')) updateBulkCounter();

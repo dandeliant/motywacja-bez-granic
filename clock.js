@@ -398,10 +398,15 @@
 
         if (m !== lastMinute || refs.phrase.children.length === 0) {
             renderPhrase(h, m);
-            // Auto-zapowiedź na granicy minuty
+            // Auto-zapowiedź na granicy minuty — POMIŃ jeśli dziennik czyta TTS
             if (m !== lastMinute && lastMinute !== -1) {
                 if (st.announceInterval > 0 && m % st.announceInterval === 0) {
-                    speak(buildPhrase(h, m, st.hourMode));
+                    if (window.mbgTTSBusy) {
+                        // Pauza: zegar nie przerywa odczytu dziennika
+                        console.log('[clock] auto-announce skipped — journal TTS active');
+                    } else {
+                        speak(buildPhrase(h, m, st.hourMode));
+                    }
                 }
             }
             lastMinute = m;
@@ -447,6 +452,10 @@
     });
 
     refs.speakBtn.addEventListener('click', () => {
+        if (window.mbgTTSBusy) {
+            alert('🔊 Dziennik aktualnie odczytuje wpis. Zatrzymaj odczyt, aby usłyszeć godzinę.');
+            return;
+        }
         const now = new Date();
         renderPhrase(now.getHours(), now.getMinutes());
         speak(buildPhrase(now.getHours(), now.getMinutes(), st.hourMode), st.language, { highlight: true });
