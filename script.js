@@ -1940,6 +1940,140 @@ setInterval(() => {
 }, 30 * 60 * 1000);
 
 /* =============================================================
+   OGRÓD WZROSTU — 5 etapów (jak Daily Chart z xlsx)
+   ============================================================= */
+
+const GROWTH_LABELS = ['Sadzonka', 'Wschodzi', 'Rośnie', 'Dojrzewa', 'W pełni kwitnie!'];
+
+// Mapuje procent ukończenia (0-100) na etap wzrostu (0-4)
+function pctToStage(pct) {
+    if (pct <= 0)  return 0;
+    if (pct < 33)  return 1;
+    if (pct < 66)  return 2;
+    if (pct < 99)  return 3;
+    return 4;
+}
+
+// Zwraca SVG drzewka dla danego etapu — 5 progresywnych ilustracji
+function growthSVG(stage) {
+    const svgs = [
+        // 0 — Sadzonka z dwoma listkami
+        `<svg viewBox="0 0 50 50" class="growth-tree stage-0" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="25" cy="45" rx="18" ry="3" fill="#78350f" opacity="0.7"/>
+            <ellipse cx="25" cy="46" rx="16" ry="1.5" fill="#1c1917"/>
+            <path d="M25 45 Q24 38 22 33" stroke="#16a34a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+            <ellipse cx="19" cy="32" rx="5" ry="2.5" fill="#22c55e" transform="rotate(-35 19 32)"/>
+            <ellipse cx="23" cy="28" rx="4" ry="2" fill="#16a34a" transform="rotate(30 23 28)"/>
+        </svg>`,
+
+        // 1 — Małe drzewko (1-33%)
+        `<svg viewBox="0 0 50 50" class="growth-tree stage-1" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="25" cy="45" rx="20" ry="3" fill="#78350f" opacity="0.7"/>
+            <ellipse cx="25" cy="46" rx="18" ry="1.5" fill="#1c1917"/>
+            <rect x="23" y="32" width="4" height="13" fill="#92400e" rx="1"/>
+            <circle cx="25" cy="28" r="8" fill="#86efac"/>
+            <circle cx="20" cy="26" r="5" fill="#86efac"/>
+            <circle cx="30" cy="26" r="5" fill="#86efac"/>
+        </svg>`,
+
+        // 2 — Średnie drzewko (33-66%)
+        `<svg viewBox="0 0 50 50" class="growth-tree stage-2" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="25" cy="45" rx="20" ry="3" fill="#78350f" opacity="0.7"/>
+            <ellipse cx="25" cy="46" rx="18" ry="1.5" fill="#1c1917"/>
+            <rect x="22" y="28" width="6" height="17" fill="#92400e" rx="1.5"/>
+            <circle cx="25" cy="22" r="12" fill="#4ade80"/>
+            <circle cx="17" cy="22" r="6" fill="#4ade80"/>
+            <circle cx="33" cy="22" r="6" fill="#4ade80"/>
+            <circle cx="25" cy="14" r="6" fill="#22c55e"/>
+        </svg>`,
+
+        // 3 — Duże zielone drzewo (66-99%)
+        `<svg viewBox="0 0 50 50" class="growth-tree stage-3" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="25" cy="45" rx="22" ry="3.5" fill="#78350f" opacity="0.7"/>
+            <ellipse cx="25" cy="46" rx="20" ry="1.5" fill="#1c1917"/>
+            <rect x="21" y="24" width="8" height="21" fill="#92400e" rx="2"/>
+            <circle cx="25" cy="18" r="14" fill="#22c55e"/>
+            <circle cx="14" cy="19" r="8" fill="#22c55e"/>
+            <circle cx="36" cy="19" r="8" fill="#22c55e"/>
+            <circle cx="25" cy="9" r="7" fill="#16a34a"/>
+            <circle cx="18" cy="12" r="4" fill="#16a34a"/>
+            <circle cx="32" cy="12" r="4" fill="#16a34a"/>
+            <circle cx="25" cy="22" r="2" fill="#dc2626"/>
+            <circle cx="30" cy="14" r="1.8" fill="#dc2626"/>
+        </svg>`,
+
+        // 4 — Kwitnąca wiśnia (99-100%) — najbardziej wow
+        `<svg viewBox="0 0 50 50" class="growth-tree stage-4" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="25" cy="45" rx="22" ry="3.5" fill="#78350f" opacity="0.7"/>
+            <ellipse cx="25" cy="46" rx="20" ry="1.5" fill="#1c1917"/>
+            <rect x="21" y="24" width="8" height="21" fill="#92400e" rx="2"/>
+            <circle cx="25" cy="18" r="14" fill="#fce7f3"/>
+            <circle cx="14" cy="19" r="8" fill="#fce7f3"/>
+            <circle cx="36" cy="19" r="8" fill="#fce7f3"/>
+            <circle cx="25" cy="9" r="7" fill="#fbcfe8"/>
+            <circle cx="18" cy="12" r="4" fill="#f9a8d4"/>
+            <circle cx="32" cy="12" r="4" fill="#f9a8d4"/>
+            <circle cx="20" cy="20" r="2" fill="#ec4899"/>
+            <circle cx="30" cy="22" r="2" fill="#ec4899"/>
+            <circle cx="25" cy="14" r="1.8" fill="#ec4899"/>
+            <!-- Spadające płatki -->
+            <circle cx="8" cy="38" r="1.5" fill="#f9a8d4"/>
+            <circle cx="42" cy="35" r="1.5" fill="#f9a8d4"/>
+            <circle cx="38" cy="42" r="1.2" fill="#fbcfe8"/>
+            <circle cx="12" cy="42" r="1.2" fill="#fbcfe8"/>
+            <!-- Iskierki -->
+            <text x="40" y="11" font-size="7" fill="#fbbf24">✦</text>
+            <text x="6" y="14" font-size="6" fill="#fbbf24">✦</text>
+        </svg>`
+    ];
+    return svgs[Math.max(0, Math.min(4, stage))];
+}
+
+// Oblicz wskaźnik ukończenia nawyku w okresie historii
+function habitCompletionRate(habit) {
+    const days = habit.historyDays || 14;
+    const doneSet = new Set(habit.doneDates);
+    const now = new Date();
+    let done = 0;
+    for (let i = 0; i < days; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        if (doneSet.has(d.toISOString().slice(0, 10))) done++;
+    }
+    return { done, days, pct: Math.round((done / days) * 100) };
+}
+
+// Wyrenderuj duży ogród dzienny — globalny progres
+function renderDailyGarden() {
+    const tree = $('#dailyGardenTree');
+    if (!tree) return;
+    const dailyHabits = state.habits.filter(h => h.type === 'daily');
+    const t = today();
+    const doneToday = dailyHabits.filter(h => h.doneDates.includes(t)).length;
+    const total = dailyHabits.length;
+    const pct = total === 0 ? 0 : Math.round((doneToday / total) * 100);
+    const stage = pctToStage(pct);
+
+    tree.innerHTML = growthSVG(stage);
+    $('#dailyGardenPct').textContent = pct + '%';
+    $('#dailyGardenLabel').textContent = GROWTH_LABELS[stage];
+    $('#dailyGardenStats').textContent = total === 0
+        ? 'Nie masz jeszcze żadnych nawyków codziennych.'
+        : `${doneToday} z ${total} nawyków wykonanych dziś`;
+    $('#dailyGardenBar').style.width = pct + '%';
+
+    // Motywacyjne hinty per etap
+    const hints = [
+        'Posadź pierwsze ziarno — kliknij „Zaznacz dziś" przy dowolnym nawyku.',
+        'Pierwszy listek już jest. Idź dalej.',
+        'Twoje drzewo łapie wiatr. Świetna robota!',
+        'Niemal pełnia. Jeszcze parę nawyków do końca dnia.',
+        '🌸 Pełnia! Cały dzienny ogród zakwitł. Jesteś niesamowity.'
+    ];
+    $('#dailyGardenHint').textContent = hints[stage];
+}
+
+/* =============================================================
    NAWYKI — CRUD + GRID 30-DNIOWY
    (inspirowane: Moje_Habit_Template.xlsx)
    ============================================================= */
@@ -2010,9 +2144,10 @@ function renderHabits() {
             : '<div class="empty-state">Brak nawyków miesięcznych.</div>';
     }
 
-    // Hydration i heatmap
+    // Hydration, heatmap, ogród
     renderHydration();
     renderHeatmap();
+    renderDailyGarden();
 }
 
 function renderHabitRow(h) {
@@ -2039,6 +2174,10 @@ function renderHabitRow(h) {
     // Klasa CSS dla siatki — dopasuj do liczby dni
     const colsClass = days <= 7 ? 'cols-7' : days <= 14 ? 'cols-14' : days <= 30 ? 'cols-15' : 'cols-20';
 
+    // Wskaźnik wzrostu — drzewko per nawyk (wg completion rate w okresie historii)
+    const growth = habitCompletionRate(h);
+    const growthStage = pctToStage(growth.pct);
+
     return `
         <div class="habit-row ${doneToday ? 'done-today' : ''}">
             <div class="habit-icon">${h.icon}</div>
@@ -2054,6 +2193,10 @@ function renderHabitRow(h) {
                     <div class="habit-dots ${colsClass}">${dots}</div>
                     <p class="habit-history-hint">Każdy kwadracik = jeden dzień. Klik = zmień status dla tego dnia. Zielony = zrobione.</p>
                 </div>
+            </div>
+            <div class="habit-growth" title="${GROWTH_LABELS[growthStage]} • ${growth.done}/${growth.days} dni (${growth.pct}%)">
+                ${growthSVG(growthStage)}
+                <span class="growth-pct">${growth.pct}%</span>
             </div>
             <button class="habit-today-btn ${doneToday ? 'done' : ''}" onclick="toggleHabitDay('${h.id}', '${t}')">
                 ${doneToday ? '✅' : '✓'}

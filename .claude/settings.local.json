@@ -18,7 +18,8 @@
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat: dokładny HH:MM:SS w podsumowaniu Timera + modal wyboru języków przy eksporcie do druku\")",
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"fix\\(tts\\): chunkowanie tekstu — naprawia urywanie się odczytu po ~15 sek \\(bug Chrome\\)\")",
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat\\(zegar\\): 5 jezykow \\(PL/EN-GB/DE/FR/RU\\) z idiomatycznym czytaniem czasu, auto-wybor glosu, usuniety selektor glosu\")",
-      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat\\(zadania\\): edycja wczesniej dodanych zadan przez modal\")"
+      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat\\(zadania\\): edycja wczesniej dodanych zadan przez modal\")",
+      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat\\(nawyki\\): ilustrowany wzrost — drzewko per nawyk + wielki ogrod dzienny \\(5 etapow sadzonka->kwitnaca wisnia\\)\")"
     ]
   }
 }
