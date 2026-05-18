@@ -2196,6 +2196,417 @@ canvas { max-height: 280px; }
 .icon-pick.selected { border-color: var(--accent); background: var(--bg-3); transform: scale(1.1); }
 
 /* =========================================================
+   VISION BOARD + AFIRMACJE
+   ========================================================= */
+.vision-card {
+    background: linear-gradient(135deg,
+        rgba(236, 72, 153, 0.10),
+        rgba(251, 191, 36, 0.08),
+        rgba(99, 102, 241, 0.08));
+    border-color: rgba(236, 72, 153, 0.35);
+    position: relative;
+    overflow: hidden;
+}
+.vision-card::before {
+    content: '';
+    position: absolute;
+    top: -40%; right: -10%;
+    width: 220px; height: 220px;
+    background: radial-gradient(circle, rgba(236, 72, 153, 0.18), transparent 70%);
+    pointer-events: none;
+}
+
+.vision-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    position: relative;
+}
+.vision-icon {
+    font-size: 20px;
+    filter: drop-shadow(0 0 8px rgba(236, 72, 153, 0.6));
+}
+.vision-label {
+    font-size: 11px;
+    color: var(--accent-2);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 700;
+}
+
+.affirmation-text {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 2.6vw, 24px);
+    line-height: 1.3;
+    color: var(--text);
+    margin: 8px 0 12px;
+    position: relative;
+    min-height: 2.6em;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.4s;
+}
+.affirmation-text.fading { opacity: 0; }
+.affirmation-text::before {
+    content: '"';
+    font-size: 50px;
+    color: var(--accent-2);
+    opacity: 0.3;
+    position: absolute;
+    top: -10px; left: -8px;
+    line-height: 1;
+}
+
+.affirmation-next {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 5px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+    font-family: inherit;
+    margin-bottom: 14px;
+}
+.affirmation-next:hover { border-color: var(--accent-2); color: var(--accent-2); }
+
+.vision-board-carousel {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+    position: relative;
+}
+.vision-board-carousel:empty::after {
+    content: 'Dodaj zdjęcia w Ustawieniach → Afirmacje + Vision Board';
+    display: block;
+    grid-column: 1 / -1;
+    padding: 30px;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-style: italic;
+    text-align: center;
+    background: var(--bg-2);
+    border-radius: var(--radius-sm);
+    border: 2px dashed var(--border);
+}
+
+.vision-image {
+    aspect-ratio: 1;
+    background-size: cover;
+    background-position: center;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.25s;
+    border: 2px solid var(--border);
+    position: relative;
+    overflow: hidden;
+}
+.vision-image:hover {
+    transform: scale(1.05);
+    border-color: var(--accent-2);
+    box-shadow: 0 8px 20px rgba(236, 72, 153, 0.3);
+    z-index: 2;
+}
+.vision-image .vision-caption {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.85));
+    color: white;
+    padding: 16px 8px 8px;
+    font-size: 11px;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    text-align: left;
+    opacity: 0;
+    transition: opacity 0.25s;
+}
+.vision-image:hover .vision-caption { opacity: 1; }
+
+/* === Edytor w Ustawieniach === */
+.vision-editor {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.vision-editor-item {
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    background-size: cover;
+    background-position: center;
+    position: relative;
+    border: 2px solid var(--border);
+}
+.vision-editor-item input[type="text"] {
+    position: absolute;
+    bottom: 4px; left: 4px; right: 4px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    border: none;
+    padding: 4px 6px;
+    font-size: 11px;
+    border-radius: 4px;
+    margin: 0;
+}
+.vision-editor-item .vision-del {
+    position: absolute;
+    top: 4px; right: 4px;
+    background: var(--danger);
+    color: white;
+    border: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+}
+
+/* === Lightbox === */
+.vision-lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    animation: fadeIn 0.25s;
+}
+.vision-lightbox.hidden { display: none; }
+.vision-lightbox img {
+    max-width: 100%;
+    max-height: 80vh;
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+.vision-lightbox-caption {
+    color: white;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 18px;
+    margin-top: 16px;
+    text-align: center;
+    max-width: 600px;
+}
+.vision-lightbox-close {
+    position: absolute;
+    top: 24px; right: 24px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+/* =========================================================
+   YEAR IN REVIEW — animowane slajdy
+   ========================================================= */
+.year-review {
+    position: fixed;
+    inset: 0;
+    z-index: 1800;
+    overflow: hidden;
+    background: #000;
+}
+.year-review.hidden { display: none; }
+
+.year-skip {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: white;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    z-index: 10;
+    transition: all 0.2s;
+}
+.year-skip:hover { background: rgba(255,255,255,0.3); }
+
+.year-progress {
+    position: absolute;
+    top: 16px; left: 16px; right: 76px;
+    display: flex;
+    gap: 4px;
+    z-index: 10;
+}
+.year-progress-bar {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.25);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.year-progress-bar > div {
+    height: 100%;
+    width: 0%;
+    background: white;
+    transition: width 0.1s linear;
+}
+.year-progress-bar.done > div { width: 100%; }
+
+.year-stage {
+    position: absolute;
+    inset: 0;
+}
+.yr-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+    color: white;
+    opacity: 0;
+    animation: yrFadeIn 0.5s forwards;
+}
+@keyframes yrFadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* Tła slajdów — różne gradienty dla każdego */
+.yr-slide.bg-1 { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%); }
+.yr-slide.bg-2 { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
+.yr-slide.bg-3 { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+.yr-slide.bg-4 { background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%); }
+.yr-slide.bg-5 { background: linear-gradient(135deg, #ec4899 0%, #fbbf24 100%); }
+.yr-slide.bg-6 { background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 50%, #f59e0b 100%); }
+.yr-slide.bg-7 { background: linear-gradient(135deg, #1e1b4b 0%, #4c1d95 50%, #831843 100%); }
+.yr-slide.bg-final { background: linear-gradient(180deg, #1a2234 0%, #312e81 40%, #6366f1 70%, #ec4899 100%); }
+
+.yr-year {
+    font-size: clamp(80px, 18vw, 200px);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -8px;
+    margin-bottom: 16px;
+    text-shadow: 0 8px 40px rgba(0,0,0,0.4);
+}
+.yr-big {
+    font-size: clamp(60px, 14vw, 140px);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -4px;
+    margin-bottom: 16px;
+    background: linear-gradient(180deg, #fff 0%, rgba(255,255,255,0.7) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 8px 40px rgba(0,0,0,0.2);
+    font-variant-numeric: tabular-nums;
+}
+.yr-slide h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 16px;
+}
+.yr-slide h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: clamp(24px, 4vw, 36px);
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 12px;
+}
+.yr-slide p {
+    font-size: 16px;
+    max-width: 480px;
+    line-height: 1.5;
+    opacity: 0.9;
+}
+.yr-emoji {
+    font-size: 80px;
+    line-height: 1;
+    margin-bottom: 24px;
+    filter: drop-shadow(0 8px 30px rgba(0,0,0,0.3));
+    animation: yrFloat 3s ease-in-out infinite;
+}
+@keyframes yrFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+}
+
+.yr-habit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+    width: 100%;
+    max-width: 400px;
+}
+.yr-habit-item {
+    background: rgba(255,255,255,0.18);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius);
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.yr-habit-item .yr-h-icon { font-size: 28px; }
+.yr-habit-item .yr-h-name { flex: 1; text-align: left; font-weight: 600; }
+.yr-habit-item .yr-h-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.yr-share-btn {
+    background: white;
+    color: var(--ink);
+    border: none;
+    padding: 16px 32px;
+    border-radius: var(--radius);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 28px;
+    box-shadow: 0 10px 30px rgba(255,255,255,0.3);
+    transition: all 0.2s;
+}
+.yr-share-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(255,255,255,0.5); }
+
+.year-nav {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    pointer-events: none;
+    z-index: 5;
+}
+.year-nav-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 32px;
+    cursor: pointer;
+    pointer-events: auto;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.year-nav:hover .year-nav-btn { opacity: 0.5; }
+.year-nav-btn:hover { opacity: 1 !important; background: rgba(0,0,0,0.1); }
+
+/* =========================================================
    10 FUNKCJI MOTYWACYJNYCH (cards, overlays, helpers)
    ========================================================= */
 

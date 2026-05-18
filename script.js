@@ -57,6 +57,26 @@ const DEFAULT_STATE = {
 
     projects: [],        // [{ id, name, color, createdAt }] — taski mają opcjonalne projectId
 
+    // Year in Review
+    yearInReviewLastShown: null,  // np. '2026' — żeby nie pokazywać 2× w tym samym roku
+
+    // Vision Board + afirmacje
+    affirmations: [
+        'Jestem osobą która kończy to, co zaczyna.',
+        'Każdy mały krok przybliża mnie do celu.',
+        'Dyscyplina jest mostem między celami a osiągnięciami.',
+        'Jestem silniejszy niż moje wymówki.',
+        'Konsekwencja > intensywność.',
+        'Małe wygrane budują wielkie życie.',
+        'Stać mnie na trudne rzeczy.',
+        'Wybieram działanie zamiast czekania.',
+        'Każda sesja to inwestycja w siebie.',
+        'Jestem autorem swojej historii.',
+        'Dziś jest dobry dzień na progres.',
+        'Robię to, co inni odkładają.'
+    ],
+    visionBoard: [],     // [{ id, imageDataUrl, caption }]
+
     timer: {
         running: false,
         startedAt: null,
@@ -1865,6 +1885,8 @@ function renderDashboard() {
     renderFreezeTokens();
     renderBeatSelf();
     renderTemptations();
+    renderAffirmation();
+    renderVisionBoard();
 }
 
 /* =============================================================
@@ -3812,6 +3834,504 @@ function renderReviewsHistory() {
 }
 
 /* =============================================================
+   VISION BOARD + AFIRMACJE
+   ============================================================= */
+
+// Wybór afirmacji dnia — deterministyczny (ten sam cytat cały dzień)
+function todayAffirmation() {
+    const pool = state.affirmations || [];
+    if (pool.length === 0) return null;
+    const t = today();
+    const seed = parseInt(t.replace(/-/g, ''), 10);
+    return pool[seed % pool.length];
+}
+
+let affirmationIdx = -1; // dla przycisku "inna"
+function renderAffirmation(forceRandom = false) {
+    const el = $('#affirmationText');
+    if (!el) return;
+    const pool = state.affirmations || [];
+    if (pool.length === 0) { el.textContent = 'Dodaj swoje afirmacje w Ustawieniach.'; return; }
+
+    let text;
+    if (forceRandom) {
+        affirmationIdx = (affirmationIdx + 1) % pool.length;
+        text = pool[affirmationIdx];
+    } else {
+        text = todayAffirmation();
+        affirmationIdx = pool.indexOf(text);
+    }
+
+    el.classList.add('fading');
+    setTimeout(() => {
+        el.textContent = text;
+        el.classList.remove('fading');
+    }, 250);
+}
+
+function renderVisionBoard() {
+    const carousel = $('#visionCarousel');
+    if (!carousel) return;
+    const items = state.visionBoard || [];
+    carousel.innerHTML = items.map((v, i) => `
+        <div class="vision-image" style="background-image:url('${v.imageDataUrl}')" data-vision-idx="${i}">
+            ${v.caption ? `<div class="vision-caption">${escapeHTML(v.caption)}</div>` : ''}
+        </div>
+    `).join('');
+
+    carousel.querySelectorAll('[data-vision-idx]').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = Number(el.dataset.visionIdx);
+            const v = state.visionBoard[idx];
+            if (!v) return;
+            $('#visionLightboxImg').src = v.imageDataUrl;
+            $('#visionLightboxCaption').textContent = v.caption || '';
+            $('#visionLightbox').classList.remove('hidden');
+        });
+    });
+}
+
+$('#affirmationNext')?.addEventListener('click', () => renderAffirmation(true));
+
+$('#visionLightboxClose')?.addEventListener('click', () => $('#visionLightbox').classList.add('hidden'));
+$('#visionLightbox')?.addEventListener('click', (e) => {
+    if (e.target.id === 'visionLightbox') $('#visionLightbox').classList.add('hidden');
+});
+
+// === Edytor afirmacji w Ustawieniach ===
+function loadAffirmationsEditor() {
+    const ed = $('#affirmationsEditor');
+    if (!ed) return;
+    ed.value = (state.affirmations || []).join('\n');
+}
+
+$('#saveAffirmations')?.addEventListener('click', () => {
+    const raw = $('#affirmationsEditor').value;
+    const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
+    if (lines.length === 0) { toast('Dodaj choć jedną afirmację', '', 'warning'); return; }
+    state.affirmations = lines;
+    saveState();
+    renderAffirmation();
+    toast('✨ Afirmacje zapisane', `${lines.length} pozycji`, 'success');
+});
+
+// === Upload obrazków vision board ===
+function compressImage(file, maxWidth = 800, quality = 0.78) {
+    return new Promise((resolve, reject) => {
+        if (!file.type.startsWith('image/')) return reject(new Error('Plik nie jest obrazem'));
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const scale = Math.min(1, maxWidth / img.width);
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+$('#visionImageInput')?.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const current = state.visionBoard || [];
+    if (current.length + files.length > 6) {
+        toast('Limit 6 zdjęć', `Masz już ${current.length} — usuń stare, by dodać nowe`, 'warning');
+        e.target.value = '';
+        return;
+    }
+    for (const file of files) {
+        try {
+            const dataUrl = await compressImage(file);
+            current.push({ id: uid(), imageDataUrl: dataUrl, caption: '' });
+        } catch (err) {
+            toast('Błąd uploadu', err.message, 'danger');
+        }
+    }
+    state.visionBoard = current;
+    saveState();
+    renderVisionEditor();
+    renderVisionBoard();
+    e.target.value = '';
+    toast('📷 Zdjęcia dodane', `Vision Board: ${current.length}/6`, 'success');
+});
+
+function renderVisionEditor() {
+    const ed = $('#visionBoardEditor');
+    if (!ed) return;
+    const items = state.visionBoard || [];
+    if (items.length === 0) {
+        ed.innerHTML = '<div class="card-sub" style="grid-column:1/-1">Brak zdjęć. Kliknij „Dodaj zdjęcie" poniżej.</div>';
+        return;
+    }
+    ed.innerHTML = items.map((v, i) => `
+        <div class="vision-editor-item" style="background-image:url('${v.imageDataUrl}')">
+            <button class="vision-del" data-vision-del="${v.id}" title="Usuń">✕</button>
+            <input type="text" placeholder="Podpis (opcjonalnie)" value="${escapeHTML(v.caption || '')}" data-vision-caption="${v.id}">
+        </div>
+    `).join('');
+
+    ed.querySelectorAll('[data-vision-del]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.visionDel;
+            state.visionBoard = state.visionBoard.filter(v => v.id !== id);
+            saveState();
+            renderVisionEditor();
+            renderVisionBoard();
+        });
+    });
+    ed.querySelectorAll('[data-vision-caption]').forEach(input => {
+        input.addEventListener('change', () => {
+            const id = input.dataset.visionCaption;
+            const item = state.visionBoard.find(v => v.id === id);
+            if (item) { item.caption = input.value.trim(); saveState(); renderVisionBoard(); }
+        });
+    });
+}
+
+/* =============================================================
+   YEAR IN REVIEW — slajdy w stylu Spotify Wrapped
+   ============================================================= */
+
+function computeYearStats(year) {
+    const y = String(year);
+
+    // Tasks
+    const tasksDone = state.tasks.filter(t => t.completedAt && t.completedAt.slice(0,4) === y).length;
+
+    // Focus
+    const focusSec = state.activities
+        .filter(a => a.start.slice(0,4) === y)
+        .reduce((s, a) => s + a.duration, 0);
+
+    // Day scores → best day
+    const dayScores = {};
+    state.activities.forEach(a => {
+        const iso = a.start.slice(0,10);
+        if (iso.slice(0,4) !== y) return;
+        dayScores[iso] = (dayScores[iso] || 0) + a.duration / 60;
+    });
+    state.tasks.forEach(t => {
+        if (!t.completedAt) return;
+        const iso = t.completedAt.slice(0,10);
+        if (iso.slice(0,4) !== y) return;
+        dayScores[iso] = (dayScores[iso] || 0) + 30;
+    });
+    let bestDay = null, bestDayScore = 0;
+    for (const [iso, sc] of Object.entries(dayScores)) {
+        if (sc > bestDayScore) { bestDayScore = sc; bestDay = iso; }
+    }
+
+    // Longest streak — z połączonych dni aktywności
+    const days = new Set();
+    state.habits.forEach(h => h.doneDates.forEach(d => { if (d.slice(0,4) === y) days.add(d); }));
+    state.tasks.forEach(t => { if (t.completedAt && t.completedAt.slice(0,4) === y) days.add(t.completedAt.slice(0,10)); });
+    state.journal.forEach(j => { if (j.date.slice(0,4) === y) days.add(j.date.slice(0,10)); });
+    state.activities.forEach(a => { if (a.start.slice(0,4) === y) days.add(a.start.slice(0,10)); });
+
+    let longest = 0, cur = 0, prev = null;
+    Array.from(days).sort().forEach(iso => {
+        if (!prev) { cur = 1; }
+        else {
+            const diff = Math.floor((new Date(iso) - new Date(prev)) / 86400000);
+            if (diff === 1) cur++;
+            else if (diff > 1) cur = 1;
+        }
+        if (cur > longest) longest = cur;
+        prev = iso;
+    });
+
+    // Top habity
+    const topHabits = state.habits
+        .map(h => ({
+            name: h.name,
+            icon: h.icon,
+            count: h.doneDates.filter(d => d.slice(0,4) === y).length
+        }))
+        .filter(h => h.count > 0)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+    // Journal
+    const journalCount = state.journal.filter(j => j.date.slice(0,4) === y).length;
+
+    // Pomodoros
+    const pomos = state.activities.filter(a => a.start.slice(0,4) === y && a.duration >= 4 * 60).length;
+
+    // Best win — z evening reviews (najwyższy score)
+    let bestEveningWin = null, bestEveningScore = 0;
+    Object.entries(state.eveningReviews || {}).forEach(([iso, r]) => {
+        if (iso.slice(0,4) !== y) return;
+        if (r.win && r.score > bestEveningScore) {
+            bestEveningScore = r.score;
+            bestEveningWin = { iso, ...r };
+        }
+    });
+
+    // Liczba dni aktywności (unikalne dni)
+    const activeDays = days.size;
+
+    return {
+        year,
+        tasksDone,
+        focusSec,
+        focusHours: Math.floor(focusSec / 3600),
+        focusMin: Math.floor(focusSec / 60),
+        bestDay,
+        bestDayScore: Math.round(bestDayScore),
+        longestStreak: longest,
+        topHabits,
+        journalCount,
+        pomos,
+        bestEveningWin,
+        activeDays,
+        level: state.gamification.level,
+        xp: state.gamification.xp
+    };
+}
+
+function shouldShowYearReview() {
+    const now = new Date();
+    const month = now.getMonth(); // 0-11
+    const year = now.getFullYear();
+    // Pokaż: w grudniu po 20., w styczniu przed 15.
+    const inWindow = (month === 11 && now.getDate() >= 20) || (month === 0 && now.getDate() <= 15);
+    if (!inWindow) return false;
+    // Sprawdź czy nie był już pokazany dla tego roku (poprzedniego, gdy w styczniu)
+    const targetYear = month === 11 ? year : year - 1;
+    if (state.yearInReviewLastShown === String(targetYear)) return false;
+    return true;
+}
+
+function fmtH(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function startYearReview(year) {
+    const targetYear = year || (new Date().getMonth() === 11 ? new Date().getFullYear() : new Date().getFullYear() - 1);
+    const stats = computeYearStats(targetYear);
+
+    // Wygeneruj slajdy
+    const slides = buildYearSlides(stats);
+
+    // Render progress bars
+    const progress = $('#yearProgress');
+    progress.innerHTML = slides.map(() => '<div class="year-progress-bar"><div></div></div>').join('');
+
+    let currentSlide = 0;
+    let slideTimer = null;
+    let progressTimer = null;
+    const SLIDE_DURATION = 5500;
+
+    function showSlide(idx) {
+        if (idx < 0 || idx >= slides.length) return;
+        currentSlide = idx;
+        $('#yearStage').innerHTML = slides[idx];
+        // Update progress
+        document.querySelectorAll('.year-progress-bar').forEach((b, i) => {
+            const fill = b.querySelector('div');
+            b.classList.toggle('done', i < idx);
+            if (i === idx) {
+                fill.style.transition = 'none';
+                fill.style.width = '0%';
+                requestAnimationFrame(() => {
+                    fill.style.transition = `width ${SLIDE_DURATION}ms linear`;
+                    fill.style.width = '100%';
+                });
+            } else if (i < idx) {
+                fill.style.width = '100%';
+            } else {
+                fill.style.width = '0%';
+            }
+        });
+        clearTimeout(slideTimer);
+        slideTimer = setTimeout(() => {
+            if (idx + 1 < slides.length) showSlide(idx + 1);
+            else closeYearReview();
+        }, SLIDE_DURATION);
+    }
+
+    function closeYearReview() {
+        clearTimeout(slideTimer);
+        $('#yearReview').classList.add('hidden');
+        document.body.style.overflow = '';
+        state.yearInReviewLastShown = String(targetYear);
+        saveState();
+    }
+
+    function next() {
+        clearTimeout(slideTimer);
+        if (currentSlide + 1 < slides.length) showSlide(currentSlide + 1);
+        else closeYearReview();
+    }
+    function prev() {
+        clearTimeout(slideTimer);
+        if (currentSlide > 0) showSlide(currentSlide - 1);
+    }
+
+    $('#yearSkip').onclick = closeYearReview;
+    $('#yearNext').onclick = next;
+    $('#yearPrev').onclick = prev;
+
+    // Klawiatura
+    const keyHandler = (e) => {
+        if ($('#yearReview').classList.contains('hidden')) {
+            document.removeEventListener('keydown', keyHandler);
+            return;
+        }
+        if (e.key === 'ArrowRight' || e.key === ' ') next();
+        if (e.key === 'ArrowLeft') prev();
+        if (e.key === 'Escape') closeYearReview();
+    };
+    document.addEventListener('keydown', keyHandler);
+
+    $('#yearReview').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    showSlide(0);
+}
+
+function buildYearSlides(s) {
+    const slides = [];
+
+    // 1. Powitanie
+    slides.push(`<div class="yr-slide bg-1">
+        <div class="yr-emoji">🎬</div>
+        <div class="yr-year">${s.year}</div>
+        <h1>Twój rok w MBG</h1>
+        <p>Spójrzmy wstecz na to, co zrobiłeś.</p>
+    </div>`);
+
+    // 2. Aktywne dni
+    slides.push(`<div class="yr-slide bg-4">
+        <div class="yr-emoji">📅</div>
+        <div class="yr-big">${s.activeDays}</div>
+        <h2>dni aktywności</h2>
+        <p>${s.activeDays >= 200 ? 'Spektakularny rok pełen działania. Ponad pół roku codziennej obecności.' :
+            s.activeDays >= 100 ? 'Solidny rok — co trzeci dzień coś dla siebie zrobiłeś.' :
+            s.activeDays >= 30 ? 'Pierwszy krok zrobiony. Następny rok = więcej.' :
+            'Każdy zaczynał gdzieś. Najważniejsze że tu jesteś.'}</p>
+    </div>`);
+
+    // 3. Zadania
+    slides.push(`<div class="yr-slide bg-2">
+        <div class="yr-emoji">✅</div>
+        <div class="yr-big">${s.tasksDone}</div>
+        <h2>${s.tasksDone === 1 ? 'zadanie ukończone' : s.tasksDone < 5 ? 'zadania ukończone' : 'zadań ukończonych'}</h2>
+        <p>${s.tasksDone >= 365 ? '🏆 Średnio ponad zadanie dziennie. Mało kto utrzymuje takie tempo.' :
+            s.tasksDone >= 100 ? 'Setki małych zwycięstw składają się na duże życiowe zmiany.' :
+            s.tasksDone >= 10 ? 'Każde ukończone zadanie to inwestycja w przyszłego siebie.' :
+            'Każda lista zaczyna się od pierwszego haczyka.'}</p>
+    </div>`);
+
+    // 4. Focus
+    slides.push(`<div class="yr-slide bg-3">
+        <div class="yr-emoji">⚡</div>
+        <div class="yr-big">${s.focusHours}h</div>
+        <h2>w głębokim skupieniu</h2>
+        <p>${s.focusHours >= 200 ? 'To 25 pełnych dni pracy — w środku rozpraszającego świata.' :
+            s.focusHours >= 50 ? 'To więcej focus time niż średnio ma większość ludzi w pracy.' :
+            s.focusHours >= 10 ? 'Każda godzina skupienia to inwestycja, której nikt Ci nie zabierze.' :
+            'Pierwsze godziny skupienia są najtrudniejsze. Reszta jest już na fundamencie.'}</p>
+    </div>`);
+
+    // 5. Najlepszy dzień
+    if (s.bestDay) {
+        const d = new Date(s.bestDay);
+        slides.push(`<div class="yr-slide bg-5">
+            <div class="yr-emoji">🌟</div>
+            <h2>Najlepszy dzień</h2>
+            <div class="yr-big" style="font-size:clamp(40px,8vw,80px)">${d.toLocaleDateString('pl-PL', { day: 'numeric', month: 'long' })}</div>
+            <p>Dzień który pamiętasz lepiej niż inne. Wracaj do niego, gdy będziesz mieć słabszą chwilę.</p>
+        </div>`);
+    }
+
+    // 6. Najdłuższy streak
+    slides.push(`<div class="yr-slide bg-2">
+        <div class="yr-emoji">🔥</div>
+        <div class="yr-big">${s.longestStreak}</div>
+        <h2>najdłuższa seria dni z rzędu</h2>
+        <p>${s.longestStreak >= 30 ? 'To prawdziwy nawyk. Nie tylko serie liczb — zmiana tożsamości.' :
+            s.longestStreak >= 7 ? 'Tydzień to próg — przekroczyłeś go. Następny cel: 30.' :
+            s.longestStreak >= 3 ? 'Każda seria zaczyna się od pierwszego dnia. A potem drugiego.' :
+            'Konsekwencja > intensywność. Spróbuj jutro pobić dziś.'}</p>
+    </div>`);
+
+    // 7. Top nawyki
+    if (s.topHabits.length > 0) {
+        slides.push(`<div class="yr-slide bg-6">
+            <div class="yr-emoji">🌳</div>
+            <h2>Top nawyki</h2>
+            <p>Najczęściej wybierane rytuały tego roku:</p>
+            <div class="yr-habit-list">
+                ${s.topHabits.map(h => `
+                    <div class="yr-habit-item">
+                        <span class="yr-h-icon">${h.icon}</span>
+                        <span class="yr-h-name">${escapeHTML(h.name)}</span>
+                        <span class="yr-h-count">${h.count}×</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>`);
+    }
+
+    // 8. Dziennik + pomodoro
+    slides.push(`<div class="yr-slide bg-4">
+        <div class="yr-emoji">📓</div>
+        <h2>${s.journalCount} ${s.journalCount === 1 ? 'wpis w dzienniku' : 'wpisów w dzienniku'}</h2>
+        <p style="margin-top:8px">+ <strong>${s.pomos}</strong> pomodorów</p>
+        <p style="margin-top:20px">Każdy wpis to ślad. Po latach zobaczysz w nich kim wtedy byłeś.</p>
+    </div>`);
+
+    // 9. Best win z evening reviews
+    if (s.bestEveningWin && s.bestEveningWin.win) {
+        slides.push(`<div class="yr-slide bg-5">
+            <div class="yr-emoji">✨</div>
+            <h2>Twój najmocniejszy win roku</h2>
+            <p style="font-family:'Fraunces',serif;font-style:italic;font-size:20px;margin-top:16px;max-width:520px">
+                „${escapeHTML(s.bestEveningWin.win)}"
+            </p>
+            <p style="margin-top:24px;opacity:0.7">— z wieczornego review</p>
+        </div>`);
+    }
+
+    // 10. Poziom + XP
+    slides.push(`<div class="yr-slide bg-7">
+        <div class="yr-emoji">👑</div>
+        <div class="yr-big">LVL ${s.level}</div>
+        <h2>${s.xp.toLocaleString('pl-PL')} XP zdobyte</h2>
+        <p>Każde XP to dowód, że zrobiłeś coś dla siebie. Nie znikną.</p>
+    </div>`);
+
+    // 11. Finał
+    slides.push(`<div class="yr-slide bg-final">
+        <div class="yr-emoji">🚀</div>
+        <h1>Idź dalej</h1>
+        <p style="font-size:18px;max-width:480px;margin-top:12px">
+            Następny rok zbudujesz tak samo jak ten — dzień po dniu.<br>
+            Mały krok dziś = ogromna zmiana za 12 miesięcy.
+        </p>
+        <button class="yr-share-btn" onclick="document.getElementById('yearSkip').click()">Zaczynam nowy rok ✓</button>
+    </div>`);
+
+    return slides;
+}
+
+$('#manualYearReviewBtn')?.addEventListener('click', () => {
+    // Pokaż dla bieżącego (lub poprzedniego, jeśli styczeń) roku
+    const y = new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear();
+    startYearReview(y);
+});
+
+/* =============================================================
    INICJALIZACJA
    ============================================================= */
 function init() {
@@ -3845,9 +4365,17 @@ function init() {
     // Ustawienia z nowych funkcji
     if ($('#eveningFlowToggle')) $('#eveningFlowToggle').checked = state.eveningFlowEnabled !== false;
 
-    // Auto-trigger evening / weekly / energy
+    // Wczytaj edytory Vision/Affirmations
+    loadAffirmationsEditor();
+    renderVisionEditor();
+
+    // Auto-trigger evening / weekly / energy / year review
     setTimeout(() => {
-        if (shouldShowEveningFlow()) startEveningFlow();
+        if (shouldShowYearReview()) {
+            const targetYear = new Date().getMonth() === 11 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+            startYearReview(targetYear);
+        }
+        else if (shouldShowEveningFlow()) startEveningFlow();
         else if (shouldShowWeeklyFlow()) startWeeklyFlow();
         else maybePromptEnergy();
     }, 1500);

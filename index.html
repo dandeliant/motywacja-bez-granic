@@ -161,6 +161,17 @@
             <p class="beat-message" id="beatMessage">—</p>
         </div>
 
+        <!-- Vision Board + dzienna afirmacja -->
+        <div class="card vision-card" id="visionCard">
+            <div class="vision-header">
+                <span class="vision-icon">✨</span>
+                <span class="vision-label">Afirmacja dnia</span>
+            </div>
+            <div class="affirmation-text" id="affirmationText">—</div>
+            <button class="affirmation-next" id="affirmationNext" title="Następna">↻ inna</button>
+            <div class="vision-board-carousel" id="visionCarousel"></div>
+        </div>
+
         <!-- Lista pokus -->
         <div class="card temptations-card">
             <h3>🚫 Lista pokus na dziś</h3>
@@ -854,6 +865,32 @@
         </div>
 
         <div class="card">
+            <h3>✨ Afirmacje + Vision Board</h3>
+            <p class="card-sub">Codzienna afirmacja z Twojej puli + zdjęcia przyszłego siebie / celów na dashboardzie.</p>
+
+            <label>Twoje afirmacje (po jednej w linii)</label>
+            <textarea id="affirmationsEditor" rows="6" placeholder="Jestem osobą która..."></textarea>
+            <button class="primary-btn" id="saveAffirmations">💾 Zapisz afirmacje</button>
+
+            <div style="margin-top: 16px">
+                <label>Vision Board (do 6 zdjęć)</label>
+                <div id="visionBoardEditor" class="vision-editor"></div>
+                <label class="primary-btn file-label" style="display:inline-flex;margin-top:8px">
+                    📷 Dodaj zdjęcie
+                    <input type="file" id="visionImageInput" accept="image/*" hidden multiple>
+                </label>
+                <small class="field-hint">Zdjęcia są kompresowane automatycznie i przechowywane lokalnie w przeglądarce.</small>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>🎉 Year in Review</h3>
+            <p class="card-sub">Coroczne podsumowanie w stylu Spotify Wrapped — wszystkie Twoje liczby, najlepsze dni, top nawyki.</p>
+            <button class="primary-btn" id="manualYearReviewBtn">🎬 Zobacz mój rok</button>
+            <small class="field-hint">Automatycznie pokaże się pod koniec grudnia / na początku stycznia.</small>
+        </div>
+
+        <div class="card">
             <h3>🌙 Koniec dnia + Tygodniowy review</h3>
             <label class="switch">
                 <input type="checkbox" id="eveningFlowToggle" checked />
@@ -1014,6 +1051,28 @@
         <p class="focus-task" id="focusTaskName">Głęboka praca</p>
         <button class="danger-btn big" id="exitFocus">✖ Zakończ sesję</button>
     </div>
+</div>
+
+<!-- =========================================================
+     YEAR IN REVIEW — animowane slajdy (Spotify Wrapped style)
+     ========================================================= -->
+<div class="year-review hidden" id="yearReview" role="dialog" aria-modal="true">
+    <button class="year-skip" id="yearSkip">✕</button>
+    <div class="year-progress" id="yearProgress"></div>
+    <div class="year-stage" id="yearStage"></div>
+    <div class="year-nav">
+        <button class="year-nav-btn" id="yearPrev">‹</button>
+        <button class="year-nav-btn" id="yearNext">›</button>
+    </div>
+</div>
+
+<!-- =========================================================
+     LIGHTBOX dla Vision Board
+     ========================================================= -->
+<div class="vision-lightbox hidden" id="visionLightbox">
+    <button class="vision-lightbox-close" id="visionLightboxClose">✕</button>
+    <img id="visionLightboxImg" alt="" />
+    <div class="vision-lightbox-caption" id="visionLightboxCaption"></div>
 </div>
 
 <!-- =========================================================
