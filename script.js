@@ -4386,6 +4386,13 @@ function init() {
         speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
     }
 
+    // Blokada obrotu ekranu — wymusza portrait gdy PWA w trybie fullscreen/standalone
+    if (screen.orientation && typeof screen.orientation.lock === 'function') {
+        screen.orientation.lock('portrait').catch(() => {
+            // Lock działa tylko w fullscreen na większości urządzeń — cicho ignoruj błąd
+        });
+    }
+
     // Po włączonych powiadomieniach — zaplanuj przypomnienia hydration
     if (state.settings.notifications) scheduleHydrationReminders();
 

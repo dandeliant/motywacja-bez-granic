@@ -10,6 +10,10 @@
     --bg-3: #242e44;
     --border: #2a3548;
 
+    /* Ciemne kolory dla tekstu NA jasnym tle (selected/white buttons) */
+    --ink: #0c1220;
+    --ink-deep: #05080f;
+
     --text: #e6edf3;
     --text-dim: #8b95a7;
     --text-muted: #5a6478;
@@ -3281,10 +3285,10 @@ canvas { max-height: 280px; }
 }
 .morning-mit-task .task-xp-pill {
     font-size: 11px;
-    background: rgba(251, 191, 36, 0.3);
+    background: #fbbf24;
     padding: 3px 9px;
     border-radius: 999px;
-    color: #fef3c7;
+    color: #1a1a1a;
     font-weight: 700;
     flex-shrink: 0;
 }
