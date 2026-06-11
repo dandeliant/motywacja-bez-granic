@@ -51,53 +51,29 @@ html, body {
 }
 
 /* =========================================================
-   BLOKADA ORIENTACJI — overlay gdy telefon w landscape
+   WYMUSZONA ORIENTACJA PIONOWA — CSS rotation
+   Gdy telefon w landscape, treść jest obracana z powrotem do pionu.
+   Z punktu widzenia użytkownika aplikacja po prostu nie ma trybu landscape.
    ========================================================= */
-.rotate-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: linear-gradient(135deg, var(--bg-0), var(--bg-1));
-    z-index: 9999;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 30px;
-    text-align: center;
-    color: var(--text);
-}
-
-.rotate-overlay .rot-icon {
-    font-size: 80px;
-    margin-bottom: 24px;
-    animation: rotatePhone 2.4s ease-in-out infinite;
-    display: inline-block;
-}
-
-@keyframes rotatePhone {
-    0%, 30%, 100% { transform: rotate(0deg); }
-    50%, 80%      { transform: rotate(-90deg); }
-}
-
-.rotate-overlay h2 {
-    font-size: 24px;
-    margin-bottom: 10px;
-    color: var(--text);
-}
-
-.rotate-overlay p {
-    color: var(--text-dim);
-    font-size: 14px;
-    max-width: 30ch;
-    line-height: 1.5;
-}
-
-/* Pokazuj overlay tylko na małych ekranach w trybie landscape
-   (na desktopie/tabletach overlay pozostaje ukryty) */
 @media (orientation: landscape) and (max-width: 950px) and (max-height: 600px) {
-    .rotate-overlay { display: flex; }
-    body > .frame, body > .sidebar, body > .topbar, body > main,
-    body > .sidebar-overlay, body > .pom-pill { display: none !important; }
+    html {
+        overflow: hidden;
+        height: 100vh;
+        width: 100vw;
+    }
+    body {
+        /* Po obróceniu o -90 stopni body zachowuje się jak portrait */
+        transform: rotate(-90deg);
+        transform-origin: left top;
+        width: 100vh;
+        height: 100vw;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+    /* Fixed elementy (sidebar, topbar, modale) wewnątrz body podążają za transformacją */
 }
 
 /* Subtelny gradientowy efekt tła */

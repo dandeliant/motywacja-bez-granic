@@ -23,7 +23,8 @@
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"fix\\(dziennik\\): odczyt wpisu kontynuuje sie przy zmianie zakladki \\(zatrzymanie tylko przyciskiem Stop\\)\")",
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"fix\\(alarmy\\): tresc alarmu w tle — systemowe powiadomienie + wibracje + retry TTS przy powrocie + przycisk Odsluchaj ponownie\")",
       "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat: Start dnia — 30-sek guided flow \\(mood, MIT, woda, focus\\) + karta MIT na dashboardzie\")",
-      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat: 10 funkcji motywacyjnych — Koniec dnia, Weekly review, Freeze days, Nic mi sie nie chce, Energy tracking, Projekcja za rok, Subtaski, Dlaczego, Lista pokus, Pokonaj siebie\")"
+      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"feat: 10 funkcji motywacyjnych — Koniec dnia, Weekly review, Freeze days, Nic mi sie nie chce, Energy tracking, Projekcja za rok, Subtaski, Dlaczego, Lista pokus, Pokonaj siebie\")",
+      "Bash(git -c user.email=\"you@example.com\" -c user.name=\"MBG\" commit -m \"fix: CSS rotation zamiast overlaya — aplikacja zawsze wyswietla sie w pionie, takze przy landscape telefonu\")"
     ]
   }
 }
