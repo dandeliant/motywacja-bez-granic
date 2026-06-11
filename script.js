@@ -4386,12 +4386,29 @@ function init() {
         speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
     }
 
-    // Blokada obrotu ekranu — wymusza portrait gdy PWA w trybie fullscreen/standalone
-    if (screen.orientation && typeof screen.orientation.lock === 'function') {
-        screen.orientation.lock('portrait').catch(() => {
-            // Lock działa tylko w fullscreen na większości urządzeń — cicho ignoruj błąd
-        });
+    // === BLOKADA OBROTU — 3 warstwy ===
+    // 1. Wstępna próba blokady (działa w PWA standalone)
+    lockOrientation();
+
+    // 2. Retry przy każdej zmianie orientacji (gdyby user obrócił telefon)
+    window.addEventListener('orientationchange', lockOrientation);
+    if (screen.orientation) {
+        screen.orientation.addEventListener?.('change', lockOrientation);
     }
+
+    // 3. Próba przejścia w fullscreen + lock przy pierwszym kliknięciu
+    // (wymagane user gesture w wielu przeglądarkach)
+    const tryLockOnGesture = () => {
+        if (document.fullscreenEnabled && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen?.().then(() => lockOrientation()).catch(() => lockOrientation());
+        } else {
+            lockOrientation();
+        }
+        document.removeEventListener('click', tryLockOnGesture);
+        document.removeEventListener('touchstart', tryLockOnGesture);
+    };
+    document.addEventListener('click', tryLockOnGesture, { once: true });
+    document.addEventListener('touchstart', tryLockOnGesture, { once: true });
 
     // Po włączonych powiadomieniach — zaplanuj przypomnienia hydration
     if (state.settings.notifications) scheduleHydrationReminders();
@@ -4418,6 +4435,19 @@ function init() {
             saveState();
             renderHeader();
         }
+    }
+}
+
+// Globalna funkcja blokady orientacji (wywoływana w 3 miejscach)
+function lockOrientation() {
+    if (screen.orientation && typeof screen.orientation.lock === 'function') {
+        screen.orientation.lock('portrait').catch(() => {});
+    } else if (screen.lockOrientation) {
+        try { screen.lockOrientation('portrait'); } catch (e) {}
+    } else if (screen.mozLockOrientation) {
+        try { screen.mozLockOrientation('portrait'); } catch (e) {}
+    } else if (screen.msLockOrientation) {
+        try { screen.msLockOrientation('portrait'); } catch (e) {}
     }
 }
 
