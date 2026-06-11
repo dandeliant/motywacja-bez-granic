@@ -3,7 +3,7 @@
    Strategia: cache-first dla app shell, network-first dla CDN
    ============================================================= */
 
-const CACHE_NAME = 'mbg-cache-v20';
+const CACHE_NAME = 'mbg-cache-v21';
 
 // Podstawowe pliki aplikacji (app shell)
 const APP_SHELL = [
@@ -35,23 +35,43 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// Fetch — cache-first dla app shell, fallback do sieci
+// Fetch — NETWORK-FIRST dla HTML/CSS/JS żeby aktualizacje docierały od razu;
+// cache-first dla pozostałych assetów (obrazki, fonty)
 self.addEventListener('fetch', (event) => {
     const req = event.request;
     if (req.method !== 'GET') return;
 
+    const url = new URL(req.url);
+    const isHTML = req.mode === 'navigate' || req.destination === 'document';
+    const isCriticalAsset = ['script', 'style', 'manifest'].includes(req.destination)
+                            || /\.(html|js|css|json)$/i.test(url.pathname);
+
+    // STRATEGIA NETWORK-FIRST dla krytycznych plików (HTML, CSS, JS) —
+    // dzięki temu zmiany kodu trafiają do użytkownika natychmiast po deploy
+    if (isHTML || isCriticalAsset) {
+        event.respondWith(
+            fetch(req).then(resp => {
+                if (resp.ok && url.origin === location.origin) {
+                    const clone = resp.clone();
+                    caches.open(CACHE_NAME).then(c => c.put(req, clone));
+                }
+                return resp;
+            }).catch(() => caches.match(req).then(cached => cached || caches.match('./index.html')))
+        );
+        return;
+    }
+
+    // STRATEGIA CACHE-FIRST dla pozostałych zasobów (obrazki, fonty, audio)
     event.respondWith(
         caches.match(req).then(cached => {
             if (cached) return cached;
             return fetch(req).then(resp => {
-                // Zapisz nowe odpowiedzi z tego samego origin do cache
-                if (resp.ok && new URL(req.url).origin === location.origin) {
+                if (resp.ok && url.origin === location.origin) {
                     const clone = resp.clone();
                     caches.open(CACHE_NAME).then(c => c.put(req, clone));
                 }
                 return resp;
             }).catch(() => {
-                // Offline fallback — zwróć głównie index.html
                 if (req.mode === 'navigate') return caches.match('./index.html');
             });
         })

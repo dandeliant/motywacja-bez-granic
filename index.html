@@ -1408,9 +1408,32 @@
 <script src="clock.js"></script>
 <script>
     // Rejestracja service workera dla PWA (offline + instalacja)
+    // + auto-reload przy wykryciu nowej wersji
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW register failed:', err));
+            navigator.serviceWorker.register('sw.js').then(reg => {
+                // Wykryj nowego service workera i przeładuj stronę gdy się aktywuje
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (!newWorker) return;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
+                            console.log('[SW] Nowa wersja aktywna — odświeżam stronę...');
+                            location.reload();
+                        }
+                    });
+                });
+                // Sprawdź czy jest update co minutę
+                setInterval(() => reg.update().catch(() => {}), 60_000);
+            }).catch(err => console.warn('SW register failed:', err));
+
+            // Przeładuj gdy zmieni się kontroler (nowy SW przejął kontrolę)
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (refreshing) return;
+                refreshing = true;
+                location.reload();
+            });
         });
     }
 </script>
